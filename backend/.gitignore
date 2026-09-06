@@ -1,0 +1,47 @@
+# ==========================================
+# LegalMate Backend Git Ignore
+# ==========================================
+
+# Dependencies
+node_modules/
+
+# Secrets & Environment Variables
+.env
+.env.*
+!.env.example
+
+# Runtime & Process Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+output.log
+output2.log
+fetch-output.log
+
+# Vector Store / Heavy Model Storage (>100MB exceeds GitHub limits)
+storage/
+storage/**
+*.index
+*.bin
+
+# User-uploaded files (exclude private documents, preserve defaults & structure)
+uploads/documents/*
+uploads/payment-proofs/*
+uploads/refund-proofs/*
+uploads/recordings/*
+uploads/payout-attachments/*
+uploads/chat/*
+!uploads/**/.gitkeep
+!uploads/profile-pictures/Admin.png
+!uploads/profile-pictures/Client.png
+!uploads/profile-pictures/Lawyer.png
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/

@@ -1,0 +1,16 @@
+{
+  "name": "legalmate-unified",
+  "version": "1.0.0",
+  "description": "LegalMate - Unified Single Port Application",
+  "main": "start-unified.js",
+  "scripts": {
+    "start": "node start-unified.js",
+    "dev": "node start-unified.js",
+    "build": "cd frontend && npm run build && cd ..",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": ["legal", "consultation", "ai", "unified"],
+  "author": "LegalMate Team",
+  "license": "MIT"
+}

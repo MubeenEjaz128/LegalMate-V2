@@ -1,0 +1,70 @@
+# ==========================================
+# LegalMate Root Git Ignore
+# ==========================================
+
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment Variables & Secrets (CRITICAL)
+.env
+.env.*
+*.env
+!.env.example
+!*.env.example
+
+# Production Build Output
+dist/
+dist-ssr/
+build/
+*/dist/
+*/build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Storage & Heavy Vector Store Artifacts (>100MB exceeds GitHub limits)
+backend/storage/
+backend/storage/**
+*.index
+*.bin
+
+# User Uploaded Files & Sensitive Customer Documents
+backend/uploads/documents/*
+backend/uploads/payment-proofs/*
+backend/uploads/refund-proofs/*
+backend/uploads/recordings/*
+backend/uploads/payout-attachments/*
+backend/uploads/chat/*
+!backend/uploads/**/.gitkeep
+!backend/uploads/profile-pictures/Admin.png
+!backend/uploads/profile-pictures/Client.png
+!backend/uploads/profile-pictures/Lawyer.png
+
+# SSL Certificates & Private Keys
+certs/*.pem
+certs/*.key
+frontend/certs/*.pem
+frontend/certs/*.key
+!frontend/certs/.gitkeep
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Audit / Temp files
+audit-frontend.json
+*.tmp
+*.bak

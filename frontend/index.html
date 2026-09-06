@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LegalMate - AI-Powered Legal Consultation</title>
+    <meta name="description" content="AI-powered legal consultation platform for Pakistan with focus on Punjab laws" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        document.getElementById('root').innerHTML =
+          '<pre style="color:red;padding:20px;font-size:14px;">JS Error: ' +
+          e.message + '\n' + (e.filename || '') + ':' + (e.lineno || '') +
+          '\n\nStack: ' + (e.error && e.error.stack ? e.error.stack : 'N/A') + '</pre>';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        document.getElementById('root').innerHTML +=
+          '<pre style="color:orange;padding:20px;font-size:14px;">Unhandled Promise: ' +
+          (e.reason && e.reason.message ? e.reason.message : String(e.reason)) + '</pre>';
+      });
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html> 
