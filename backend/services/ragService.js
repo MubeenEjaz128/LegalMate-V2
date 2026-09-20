@@ -77,6 +77,38 @@ class CodeCraftClient {
     this.timeout = timeout;
   }
 
+  async healthCheck() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [{ role: 'user', content: 'Reply with OK only.' }],
+          temperature: 0,
+          stream: false,
+          max_tokens: 8
+        }),
+        signal: controller.signal
+      });
+
+      const raw = await response.text();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${raw.slice(0, 300)}`);
+      }
+      const data = raw ? JSON.parse(raw) : {};
+      return data?.choices?.[0]?.message?.content || 'OK';
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   async invokePrompt(promptTemplate, input) {
     const promptValue = await promptTemplate.invoke(input);
     const lcMessages = typeof promptValue?.toChatMessages === 'function'
@@ -291,6 +323,12 @@ class RAGService {
       });
       this.activeProvider = 'codecraft';
       console.log(`[RAG] Primary AI model: CodeCraft ${codecraftModel} via /chat/completions`);
+
+      if (process.env.CODECRAFT_STARTUP_PROBE === 'true') {
+        this.model.healthCheck()
+          .then((result) => console.log(`[RAG] CodeCraft startup probe succeeded: ${String(result).slice(0, 80)}`))
+          .catch((error) => console.error(`[RAG] CodeCraft startup probe failed: ${error?.message || error}`));
+      }
     }
 
     // Optional fallback: Perplexity
