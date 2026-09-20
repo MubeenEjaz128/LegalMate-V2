@@ -796,9 +796,12 @@ const OverviewTab = ({
     }
   }, [])
 
-  const onlineCount = liveStats?.onlineUsers ?? (realtimeStats?.online?.users || 0)
+  // Never trust the legacy aggregate onlineUsers field: older backend builds
+  // counted raw Socket.IO connections, so one person could appear multiple times.
+  // The dashboard only counts real platform users: clients + lawyers.
   const onlineClients = liveStats?.onlineClients ?? (realtimeStats?.online?.clients || 0)
   const onlineLawyers = liveStats?.onlineLawyers ?? (realtimeStats?.online?.lawyers || 0)
+  const onlineCount = onlineClients + onlineLawyers
   const pendingCount = liveStats?.pendingAppointments ?? (realtimeStats?.active?.pendingAppointments || 0)
   const activeChatsCount = liveStats?.activeChats ?? (realtimeStats?.active?.activeChats || 0)
   const overdueCount = liveStats?.overdueAppointments ?? (realtimeStats?.active?.overdueAppointments || 0)
