@@ -328,10 +328,11 @@ class RAGService {
 
     // Initialize PRIMARY model: CodeCraft (OpenAI-compatible)
     const codecraftKey = process.env.CODECRAFT_API_KEY;
-    const codecraftBaseUrl = process.env.CODECRAFT_BASE_URL || 'https://codecraftapi.com/v1';
+    const codecraftEnabled = process.env.CODECRAFT_ENABLED !== 'false';
+    const codecraftBaseUrl = process.env.CODECRAFT_BASE_URL || 'https://www.codecraftapi.com/v1';
     const codecraftModel = process.env.CODECRAFT_MODEL || 'gpt-5.6-sol';
 
-    if (codecraftKey) {
+    if (codecraftKey && codecraftEnabled) {
       this.model = new CodeCraftClient({
         apiKey: codecraftKey,
         baseUrl: codecraftBaseUrl,
