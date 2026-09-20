@@ -1007,7 +1007,7 @@ router.get('/refund-requests', auth, requireAdmin, async (req, res) => {
 });
 
 
-// Get system statistics (admin only)
+// Get system statistics (admin only) — operational/realtime snapshot
 router.get('/stats', auth, requireAdmin, async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
@@ -1015,30 +1015,18 @@ router.get('/stats', auth, requireAdmin, async (req, res) => {
     }
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // Run all queries in parallel for max speed
-    const [
-      userCounts,
-      appointmentCounts,
-      recentRegistrations,
-      recentAppointments,
-      activeChats,
-      overdueInvoices
-    ] = await Promise.all([
-      // User counts via aggregation (single query)
+    const [userCounts, appointmentCounts, recentRegistrations, recentAppointments] = await Promise.all([
       User.aggregate([
         { $group: {
           _id: null,
           total: { $sum: 1 },
           lawyers: { $sum: { $cond: [{ $eq: ['$role', 'lawyer'] }, 1, 0] } },
           clients: { $sum: { $cond: [{ $eq: ['$role', 'client'] }, 1, 0] } },
+          activeUsers: { $sum: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] } },
           activeLawyers: { $sum: { $cond: [{ $and: [{ $eq: ['$role', 'lawyer'] }, { $eq: ['$isActive', true] }, { $eq: ['$isVerified', true] }] }, 1, 0] } }
         }}
       ]),
-      // Appointment counts via aggregation (single query)
       Appointment.aggregate([
         { $group: {
           _id: null,
@@ -1051,20 +1039,31 @@ router.get('/stats', auth, requireAdmin, async (req, res) => {
         }}
       ]),
       User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      Appointment.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      (async () => { try { const Conversation = require('../models/Conversation'); return await Conversation.countDocuments({ updatedAt: { $gte: oneHourAgo } }); } catch { return 0; } })(),
-      Appointment.countDocuments({ date: { $lt: yesterday }, status: { $in: ['pending', 'confirmed'] } })
+      Appointment.countDocuments({ createdAt: { $gte: sevenDaysAgo } })
     ]);
 
-    const uc = userCounts[0] || { total: 0, lawyers: 0, clients: 0, activeLawyers: 0 };
+    const uc = userCounts[0] || { total: 0, lawyers: 0, clients: 0, activeUsers: 0, activeLawyers: 0 };
     const ac = appointmentCounts[0] || { total: 0, pending: 0, confirmed: 0, completed: 0, cancelled: 0, rejected: 0 };
+
+    const getRealtimePlatformStats = req.app.get('getRealtimePlatformStats');
+    const realtime = typeof getRealtimePlatformStats === 'function'
+      ? await getRealtimePlatformStats()
+      : {
+          online: { users: 0, clients: 0, lawyers: 0, admins: 0, totalAuthenticated: 0 },
+          pendingAppointments: ac.pending,
+          activeChats: 0,
+          overdueAppointments: 0,
+          timestamp: new Date().toISOString()
+        };
 
     res.json({
       users: {
         total: uc.total,
         lawyers: uc.lawyers,
         clients: uc.clients,
+        active: uc.activeUsers,
         activeLawyers: uc.activeLawyers,
+        new: recentRegistrations,
         recentRegistrations
       },
       appointments: {
@@ -1074,10 +1073,16 @@ router.get('/stats', auth, requireAdmin, async (req, res) => {
         completed: ac.completed,
         cancelled: ac.cancelled,
         rejected: ac.rejected,
+        inPeriod: recentAppointments,
         recent: recentAppointments
       },
-      online: { users: req.app.get('onlineUsers')?.size || 0 },
-      active: { pendingAppointments: ac.pending, activeChats, overdueInvoices }
+      online: realtime.online,
+      active: {
+        pendingAppointments: realtime.pendingAppointments,
+        activeChats: realtime.activeChats,
+        overdueAppointments: realtime.overdueAppointments
+      },
+      timestamp: realtime.timestamp
     });
   } catch (error) {
     console.error('Get admin stats error:', error);
@@ -1209,12 +1214,11 @@ router.get('/logs', auth, requireAdmin, async (req, res) => {
   }
 });
 
-// Dummy endpoint for analytics (same as /stats)
+// Dashboard analytics — database-backed business metrics
 router.get('/analytics', auth, requireAdmin, async (req, res) => {
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // Run all queries in parallel
     const [
       userCounts,
       appointmentCounts,
@@ -1225,38 +1229,37 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
       chatCounts,
       feedbackAgg
     ] = await Promise.all([
-      // User counts (single aggregation)
       User.aggregate([
         { $group: {
           _id: null,
           total: { $sum: 1 },
           lawyers: { $sum: { $cond: [{ $eq: ['$role', 'lawyer'] }, 1, 0] } },
           clients: { $sum: { $cond: [{ $eq: ['$role', 'client'] }, 1, 0] } },
+          activeUsers: { $sum: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] } },
           activeLawyers: { $sum: { $cond: [{ $and: [{ $eq: ['$role', 'lawyer'] }, { $eq: ['$isActive', true] }, { $eq: ['$isVerified', true] }] }, 1, 0] } }
         }}
       ]),
-      // Appointment counts (single aggregation)
       Appointment.aggregate([
         { $group: {
           _id: null,
           total: { $sum: 1 },
           pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
-          completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } }
+          confirmed: { $sum: { $cond: [{ $eq: ['$status', 'confirmed'] }, 1, 0] } },
+          completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+          cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } }
         }}
       ]),
       User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
       Appointment.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      // Revenue via aggregation (no loading all docs into memory)
       Appointment.aggregate([
         { $match: { status: 'completed', amount: { $exists: true, $ne: null } } },
         { $group: { _id: null, totalRevenue: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]),
-      // Recent revenue via aggregation
       Appointment.aggregate([
         { $match: { status: 'completed', amount: { $exists: true, $ne: null }, createdAt: { $gte: sevenDaysAgo } } },
         { $group: { _id: null, revenue: { $sum: '$amount' } } }
       ]),
-      // Chat counts
       (async () => {
         try {
           const Conversation = require('../models/Conversation');
@@ -1265,9 +1268,10 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
             Conversation.countDocuments({ createdAt: { $gte: sevenDaysAgo } })
           ]);
           return { total, recent };
-        } catch { return { total: 0, recent: 0 }; }
+        } catch {
+          return { total: 0, recent: 0 };
+        }
       })(),
-      // Feedback average (aggregation instead of loading all docs)
       (async () => {
         try {
           const Feedback = require('../models/Feedback');
@@ -1279,12 +1283,14 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
             ])
           ]);
           return { total: countResult, avg: avgResult[0]?.avg || 0 };
-        } catch { return { total: 0, avg: 0 }; }
+        } catch {
+          return { total: 0, avg: 0 };
+        }
       })()
     ]);
 
-    const uc = userCounts[0] || { total: 0, lawyers: 0, clients: 0, activeLawyers: 0 };
-    const ac = appointmentCounts[0] || { total: 0, pending: 0, completed: 0 };
+    const uc = userCounts[0] || { total: 0, lawyers: 0, clients: 0, activeUsers: 0, activeLawyers: 0 };
+    const ac = appointmentCounts[0] || { total: 0, pending: 0, confirmed: 0, completed: 0, cancelled: 0, rejected: 0 };
     const rev = revenueAgg[0] || { totalRevenue: 0, count: 0 };
     const recentRev = recentRevenueAgg[0] || { revenue: 0 };
 
@@ -1292,15 +1298,21 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
       users: {
         total: uc.total,
         new: recentRegistrations,
+        recentRegistrations,
         lawyers: uc.lawyers,
         clients: uc.clients,
-        active: uc.activeLawyers
+        active: uc.activeUsers,
+        activeLawyers: uc.activeLawyers
       },
       appointments: {
         total: ac.total,
         inPeriod: recentAppointments,
+        recent: recentAppointments,
         pending: ac.pending,
-        completed: ac.completed
+        confirmed: ac.confirmed,
+        completed: ac.completed,
+        cancelled: ac.cancelled,
+        rejected: ac.rejected
       },
       payments: {
         totalRevenue: rev.totalRevenue,
@@ -1310,11 +1322,6 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
       chats: {
         total: chatCounts.total,
         inPeriod: chatCounts.recent
-      },
-      invoices: {
-        paid: ac.completed,
-        overdue: ac.pending,
-        total: ac.total
       },
       feedback: {
         averageRating: Math.round(feedbackAgg.avg * 10) / 10,
