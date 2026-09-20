@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { ChatOpenAI } = require('@langchain/openai');
 const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
 const { franc } = require('franc-min');
@@ -261,6 +262,7 @@ class RAGService {
     this.ragEnabled = true;
     this.ragDisableReason = '';
     this.vectorStorePath = path.join(__dirname, '../storage/vector_store_hnsw');
+    this.sourceStorePath = path.join(__dirname, '../storage/rag_sources');
   }
 
   async initialize() {
@@ -418,6 +420,103 @@ class RAGService {
   }
 
   // Refactored processing logic to be reusable
+  _buildSourceDescriptor(cleanedText, entry, lawTitle) {
+    const headings = cleanedText.match(/(?:Section|Article|Chapter|Part)\s+[0-9A-ZIVXLC.-]+[^.;]{0,140}/gi) || [];
+    const uniqueHeadings = [...new Set(headings.map((h) => h.trim()))].slice(0, 120);
+
+    const opening = cleanedText.slice(0, 2200);
+    const ending = cleanedText.length > 2200 ? cleanedText.slice(-1200) : '';
+
+    return [
+      `Title: ${lawTitle || entry.file_name || 'Pakistani legal document'}`,
+      `File: ${entry.file_name || 'unknown'}`,
+      uniqueHeadings.length ? `Headings: ${uniqueHeadings.join(' | ')}` : '',
+      `Opening text: ${opening}`,
+      ending ? `Closing text: ${ending}` : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  async _retrieveRelevantSourceChunks(question, sourceDocs, limit = 8) {
+    if (!Array.isArray(sourceDocs) || sourceDocs.length === 0) return [];
+
+    const embeddings = new HashEmbeddings({
+      dimensions: parseInt(process.env.RAG_HASH_DIMENSIONS || '256', 10)
+    });
+    const queryVector = await embeddings.embedQuery(question);
+    const candidates = [];
+
+    const meaningfulTerms = [...new Set(
+      String(question || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\u0600-\u06ff]+/g, ' ')
+        .split(/\s+/)
+        .filter((t) => t.length >= 4)
+    )].slice(0, 30);
+
+    const l2Distance = (a, b) => {
+      let sum = 0;
+      const len = Math.min(a.length, b.length);
+      for (let i = 0; i < len; i++) {
+        const d = a[i] - b[i];
+        sum += d * d;
+      }
+      return Math.sqrt(sum);
+    };
+
+    const sourceLimit = Math.max(3, parseInt(process.env.RAG_SOURCE_CANDIDATES || '6', 10));
+
+    for (const sourceDoc of sourceDocs.slice(0, sourceLimit)) {
+      const sourceFile = sourceDoc?.metadata?.sourceFile;
+      if (!sourceFile) continue;
+
+      const absolutePath = path.join(this.sourceStorePath, sourceFile);
+      if (!fs.existsSync(absolutePath)) continue;
+
+      let fullText;
+      try {
+        fullText = zlib.gunzipSync(fs.readFileSync(absolutePath)).toString('utf8');
+      } catch (error) {
+        console.warn('[RAG] Failed reading compact source:', sourceFile, error.message);
+        continue;
+      }
+
+      const chunks = await this.chunkText(fullText, {
+        fileName: sourceDoc.metadata.fileName,
+        lawTitle: sourceDoc.metadata.lawTitle
+      });
+
+      const texts = chunks.map((doc) => doc.pageContent);
+      const vectors = await embeddings.embedDocuments(texts);
+
+      for (let i = 0; i < chunks.length; i++) {
+        const lower = texts[i].toLowerCase();
+        const overlap = meaningfulTerms.reduce((count, term) => count + (lower.includes(term) ? 1 : 0), 0);
+        const distance = l2Distance(queryVector, vectors[i]);
+
+        // Require at least one meaningful lexical hit when possible. This prevents
+        // unrelated legal material from becoming "context" just because it is nearest.
+        if (meaningfulTerms.length > 0 && overlap === 0) continue;
+
+        candidates.push({
+          doc: chunks[i],
+          distance,
+          overlap
+        });
+      }
+    }
+
+    candidates.sort((a, b) => {
+      if (b.overlap !== a.overlap) return b.overlap - a.overlap;
+      return a.distance - b.distance;
+    });
+
+    const maxDistance = Number(process.env.RAG_CHUNK_MAX_DISTANCE || '1.35');
+    return candidates
+      .filter((item) => item.distance <= maxDistance)
+      .slice(0, limit)
+      .map((item) => item.doc);
+  }
+
   async processEntry(entry) {
     const cleanedText = this.cleanText(entry.text);
     const lawTitle = this.detectLawTitle(cleanedText) || entry.file_name;
@@ -492,7 +591,10 @@ class RAGService {
 
     const embeddings = createEmbeddings();
     let store = null;
-    const batchSize = Math.max(25, parseInt(process.env.RAG_BUILD_BATCH_SIZE || '100', 10));
+    const batchSize = Math.max(25, parseInt(process.env.RAG_BUILD_BATCH_SIZE || '250', 10));
+
+    fs.rmSync(this.sourceStorePath, { recursive: true, force: true });
+    fs.mkdirSync(this.sourceStorePath, { recursive: true });
 
     for (const fileName of fileNames) {
       const datasetPath = path.join(__dirname, '..', fileName);
@@ -506,6 +608,10 @@ class RAGService {
       const dataset = JSON.parse(rawData);
       console.log(`[RAG Build] ${fileName}: ${dataset.length} source records`);
 
+      const datasetKey = path.basename(fileName, path.extname(fileName)).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const datasetSourceDir = path.join(this.sourceStorePath, datasetKey);
+      fs.mkdirSync(datasetSourceDir, { recursive: true });
+
       let pendingDocs = [];
       let processed = 0;
 
@@ -517,13 +623,31 @@ class RAGService {
           await store.addDocuments(pendingDocs);
         }
         processed += pendingDocs.length;
-        console.log(`[RAG Build] ${fileName}: indexed ${processed} chunks`);
+        console.log(`[RAG Build] ${fileName}: indexed ${processed} source documents`);
         pendingDocs = [];
       };
 
-      for (const entry of dataset) {
-        const docs = await this.processEntry(entry);
-        pendingDocs.push(...docs);
+      for (let index = 0; index < dataset.length; index++) {
+        const entry = dataset[index] || {};
+        const cleanedText = this.cleanText(entry.text || '');
+        if (!cleanedText) continue;
+
+        const lawTitle = this.detectLawTitle(cleanedText) || entry.file_name || `${datasetKey}-${index}`;
+        const sourceFile = path.join(datasetKey, `${index}.txt.gz`);
+        const absoluteSourceFile = path.join(this.sourceStorePath, sourceFile);
+
+        fs.writeFileSync(absoluteSourceFile, zlib.gzipSync(Buffer.from(cleanedText, 'utf8'), { level: 6 }));
+
+        const descriptor = this._buildSourceDescriptor(cleanedText, entry, lawTitle);
+        pendingDocs.push(new Document({
+          pageContent: descriptor,
+          metadata: {
+            fileName: entry.file_name || fileName,
+            lawTitle,
+            sourceFile
+          }
+        }));
+
         if (pendingDocs.length >= batchSize) {
           await flush();
         }
@@ -536,12 +660,13 @@ class RAGService {
       throw new Error('No documents were available to build the RAG vector store.');
     }
 
+    fs.rmSync(this.vectorStorePath, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(this.vectorStorePath), { recursive: true });
     await store.save(this.vectorStorePath);
     this.vectorStore = store;
     this.ragEnabled = true;
     this.ragDisableReason = '';
-    console.log(`[RAG Build] Vector store saved to ${this.vectorStorePath}`);
+    console.log(`[RAG Build] Compact vector store saved to ${this.vectorStorePath}`);
     return this.vectorStorePath;
   }
 
@@ -664,13 +789,24 @@ class RAGService {
 
     if (this.ragEnabled && this.vectorStore) {
       try {
-        const results = await this.vectorStore.similaritySearchWithScore(retrievalQuestion, 8);
-        const MAX_L2_DISTANCE = (process.env.RAG_EMBEDDING_MODE || '').toLowerCase() === 'hash' ? 1.15 : 0.70;
+        const sourceResults = await this.vectorStore.similaritySearchWithScore(
+          retrievalQuestion,
+          Math.max(6, parseInt(process.env.RAG_SOURCE_CANDIDATES || '6', 10))
+        );
 
-        if (results && results.length > 0) {
-          relevantDocs = results
-            .filter(([doc, score]) => score < MAX_L2_DISTANCE)
-            .map(([doc, score]) => doc);
+        if (sourceResults && sourceResults.length > 0) {
+          const sourceDocs = sourceResults.map(([doc]) => doc);
+          const hasCompactSources = sourceDocs.some((doc) => doc?.metadata?.sourceFile);
+
+          if (hasCompactSources) {
+            relevantDocs = await this._retrieveRelevantSourceChunks(retrievalQuestion, sourceDocs, 8);
+          } else {
+            // Backward-compatible fallback for legacy indexes.
+            const maxDistance = (process.env.RAG_EMBEDDING_MODE || '').toLowerCase() === 'hash' ? 1.15 : 0.70;
+            relevantDocs = sourceResults
+              .filter(([doc, score]) => score < maxDistance)
+              .map(([doc]) => doc);
+          }
         }
 
         if (relevantDocs.length > 0) {
