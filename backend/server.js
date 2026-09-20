@@ -306,7 +306,20 @@ app.use('/api/auth', authRoutes);
 console.log('✅ Registered /api/auth routes');
 app.use('/api/lawyers', lawyerRoutes);
 console.log('✅ Registered /api/lawyers routes');
-app.use('/api/appointments', appointmentRoutes);
+app.use('/api/appointments', (req, res, next) => {
+  const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isMutation) {
+    res.on('finish', () => {
+      if (res.statusCode < 400) {
+        const broadcastRealtimeStats = req.app.get('broadcastRealtimeStats');
+        if (typeof broadcastRealtimeStats === 'function') {
+          broadcastRealtimeStats().catch(() => {});
+        }
+      }
+    });
+  }
+  next();
+}, appointmentRoutes);
 console.log('✅ Registered /api/appointments routes');
 app.use('/api/feedback', feedbackRoutes);
 console.log('✅ Registered /api/feedback routes');
