@@ -419,6 +419,67 @@ class RAGService {
     console.log('Ingestion complete. Vector store updated and saved.');
   }
 
+  async buildVectorStoreFromDatasets(fileNames = ['dataset.json', 'dataset1.json']) {
+    const HNSW = await resolveUsableHNSWLib();
+    if (!HNSW) {
+      throw new Error('Cannot build vector store because hnswlib-node runtime is unavailable.');
+    }
+
+    const embeddings = new LocalEmbeddings();
+    let store = null;
+    const batchSize = Math.max(25, parseInt(process.env.RAG_BUILD_BATCH_SIZE || '100', 10));
+
+    for (const fileName of fileNames) {
+      const datasetPath = path.join(__dirname, '..', fileName);
+      if (!fs.existsSync(datasetPath)) {
+        console.warn(`[RAG Build] Skipping missing dataset: ${fileName}`);
+        continue;
+      }
+
+      console.log(`[RAG Build] Reading ${fileName}...`);
+      const rawData = fs.readFileSync(datasetPath, 'utf8');
+      const dataset = JSON.parse(rawData);
+      console.log(`[RAG Build] ${fileName}: ${dataset.length} source records`);
+
+      let pendingDocs = [];
+      let processed = 0;
+
+      const flush = async () => {
+        if (!pendingDocs.length) return;
+        if (!store) {
+          store = await HNSW.fromDocuments(pendingDocs, embeddings);
+        } else {
+          await store.addDocuments(pendingDocs);
+        }
+        processed += pendingDocs.length;
+        console.log(`[RAG Build] ${fileName}: indexed ${processed} chunks`);
+        pendingDocs = [];
+      };
+
+      for (const entry of dataset) {
+        const docs = await this.processEntry(entry);
+        pendingDocs.push(...docs);
+        if (pendingDocs.length >= batchSize) {
+          await flush();
+        }
+      }
+
+      await flush();
+    }
+
+    if (!store) {
+      throw new Error('No documents were available to build the RAG vector store.');
+    }
+
+    fs.mkdirSync(path.dirname(this.vectorStorePath), { recursive: true });
+    await store.save(this.vectorStorePath);
+    this.vectorStore = store;
+    this.ragEnabled = true;
+    this.ragDisableReason = '';
+    console.log(`[RAG Build] Vector store saved to ${this.vectorStorePath}`);
+    return this.vectorStorePath;
+  }
+
   cleanText(text) {
     if (!text) return "";
 
