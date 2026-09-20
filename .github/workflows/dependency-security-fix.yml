@@ -1,0 +1,67 @@
+name: Backend dependency security refresh
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/package.json
+      - .github/workflows/dependency-security-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Resolve upgraded dependency graph
+        working-directory: backend
+        run: npm install --ignore-scripts
+
+      - name: Apply non-breaking audit fixes
+        working-directory: backend
+        run: npm audit fix --ignore-scripts || true
+
+      - name: Print final audit
+        working-directory: backend
+        shell: bash
+        run: |
+          npm audit --json > audit-final.json || true
+          node - <<'NODE'
+          const fs = require('fs');
+          const a = JSON.parse(fs.readFileSync('audit-final.json', 'utf8'));
+          console.log('FINAL_AUDIT_SUMMARY=' + JSON.stringify(a.metadata?.vulnerabilities || {}));
+          for (const [name, v] of Object.entries(a.vulnerabilities || {})) {
+            console.log(JSON.stringify({
+              name,
+              severity: v.severity,
+              direct: !!v.isDirect,
+              range: v.range,
+              fixAvailable: v.fixAvailable
+            }));
+          }
+          NODE
+          rm -f audit-final.json
+
+      - name: Commit refreshed lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- backend/package-lock.json backend/package.json; then
+            echo "No lockfile changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/package-lock.json backend/package.json
+          git commit -m "chore: refresh backend lockfile after security upgrades"
+          git push
