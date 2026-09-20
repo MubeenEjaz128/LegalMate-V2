@@ -844,7 +844,7 @@ const OverviewTab = ({
       title: 'Total Users',
       value: users.total || 0,
       change: users.new || 0,
-      changeLabel: 'new this period',
+      changeLabel: 'new last 7 days',
       icon: Users,
       color: 'blue'
     },
@@ -852,7 +852,7 @@ const OverviewTab = ({
       title: 'Total Appointments',
       value: appointments.total || 0,
       change: appointments.inPeriod || 0,
-      changeLabel: 'this period',
+      changeLabel: 'last 7 days',
       icon: Calendar,
       color: 'green'
     },
@@ -962,7 +962,7 @@ const OverviewTab = ({
               <span className="font-medium">{users.clients || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-secondary-600">Active Users:</span>
+              <span className="text-secondary-600">Enabled Accounts:</span>
               <span className="font-medium">{users.active || 0}</span>
             </div>
             <div className="flex justify-between">
@@ -989,11 +989,11 @@ const OverviewTab = ({
               <span className="font-medium">{appointments.completed || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-secondary-600">Active Lawyers:</span>
+              <span className="text-secondary-600">Verified Active Lawyers:</span>
               <span className="font-medium">{users.activeLawyers || 0}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-secondary-600">Recent Activity:</span>
+              <span className="text-secondary-600">Appointments (7 days):</span>
               <span className="font-medium">{appointments.recent || 0} appointments</span>
             </div>
           </div>
