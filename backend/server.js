@@ -47,16 +47,17 @@ const allowedOrigins = [
 ];
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (same-origin) or from allowed origins
+    // Allow requests with no origin (same-origin, mobile apps) or from allowed origins
     if (!origin ||
       allowedOrigins.includes(origin) ||
       origin.includes(`localhost:${PORT}`) ||
       /^https?:\/\/192\.168\.\d+\.\d+:\d+$/.test(origin) ||
+      /\.vercel\.app$/.test(origin) ||
       origin.includes('64.227.155.150')) {
       callback(null, true);
     } else {
-      console.warn(`⚠️ CORS warning for origin: ${origin} (allowed for same-origin)`);
-      callback(null, true); // Allow for same-origin requests
+      console.warn(`⚠️ CORS warning for origin: ${origin} (allowing request)`);
+      callback(null, true);
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -233,18 +234,23 @@ const INTEGRATE_AI = process.env.INTEGRATE_AI === 'true';
 let aiServiceProcess = null;
 
 if (INTEGRATE_AI) {
-  const { startAIService, stopAIService } = require('./start-ai-service');
-  aiServiceProcess = startAIService();
+  try {
+    const { startAIService, stopAIService } = require('./start-ai-service');
+    aiServiceProcess = startAIService();
 
-  // Cleanup on exit
-  process.on('SIGINT', () => {
-    stopAIService();
-    process.exit(0);
-  });
-  process.on('SIGTERM', () => {
-    stopAIService();
-    process.exit(0);
-  });
+    // Cleanup on exit
+    process.on('SIGINT', () => {
+      stopAIService?.();
+      process.exit(0);
+    });
+    process.on('SIGTERM', () => {
+      stopAIService?.();
+      process.exit(0);
+    });
+    console.log('✅ External AI sub-service started successfully');
+  } catch (aiErr) {
+    console.warn('⚠️ Optional AI sub-service script (start-ai-service.js) not found. Using in-process RAG service instead.');
+  }
 }
 
 // Initialize database connection with async/await
@@ -420,7 +426,8 @@ const io = socketIo(server, {
       if (!origin ||
         allowedOrigins.includes(origin) ||
         origin.includes(`localhost:${PORT}`) ||
-        /^https?:\/\/192\.168\.\d+\.\d+:\d+$/.test(origin)) {
+        /^https?:\/\/192\.168\.\d+\.\d+:\d+$/.test(origin) ||
+        /\.vercel\.app$/.test(origin)) {
         callback(null, true);
       } else {
         console.warn(`⚠️ Socket.IO CORS warning for origin: ${origin}`);

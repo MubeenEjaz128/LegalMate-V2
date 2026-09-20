@@ -68,3 +68,7 @@ $RECYCLE.BIN/
 audit-frontend.json
 *.tmp
 *.bak
+
+# Playwright Test Artifacts
+playwright-report/
+test-results/

@@ -10,7 +10,15 @@
     "build:frontend": "cd frontend && npm run build",
     "install:all": "cd backend && npm install && cd ../frontend && npm install"
   },
-  "keywords": ["legal", "consultation", "ai", "unified"],
+  "keywords": [
+    "legal",
+    "consultation",
+    "ai",
+    "unified"
+  ],
   "author": "LegalMate Team",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
 }

@@ -201,3 +201,23 @@ exports.deleteSession = async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
+exports.getChatStats = async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?._id;
+    const totalSessions = await ChatSession.countDocuments({ userId });
+    const totalMessages = await AiChat.countDocuments({ userId });
+    res.json({
+      success: true,
+      stats: {
+        totalSessions,
+        totalMessages,
+        dailyLimit: parseInt(process.env.AI_DAILY_LIMIT) || 30,
+        minuteLimit: parseInt(process.env.AI_MINUTE_LIMIT) || 5,
+      }
+    });
+  } catch (error) {
+    console.error('Get Chat Stats Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};

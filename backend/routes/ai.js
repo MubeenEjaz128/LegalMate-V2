@@ -8,6 +8,7 @@ const router = express.Router();
 router.post('/chat', auth, aiRateLimit, aiController.chat);
 
 // Frontend compatibility routes
+router.get('/chat/stats', auth, aiController.getChatStats);
 router.get('/chat/sessions', auth, aiController.getSessions);
 router.post('/chat/session/init', auth, aiController.createSession);
 router.get('/chat/history/:sessionId', auth, aiController.getSessionMessages);
