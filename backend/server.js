@@ -441,6 +441,7 @@ const io = socketIo(server, {
 });
 const Appointment = require('./models/Appointment');
 const ChatMessage = require('./models/ChatMessage');
+const User = require('./models/User');
 
 // Pass socket.io instance to chat routes after everything is set up
 if (chatRoutes.setSocketIO) {
@@ -454,48 +455,119 @@ app.set('io', io);
 // Track consultation room participants with metadata
 const consultationParticipants = new Map(); // consultationId -> Map(socketId -> { userId, name, role })
 
-// Track all connected sockets for real-time online user count
-const onlineUsers = new Set();
+// Track low-level socket connections separately from authenticated user presence.
+const connectedSockets = new Set();
 
-// Broadcast full real-time stats to admin room
-const broadcastRealtimeStats = async () => {
-  try {
-    const Conversation = require('./models/Conversation');
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+// Track chat rooms that are actually open in the UI right now.
+const activeChatRooms = new Map(); // conversationId -> Set(socketId)
 
-    const [pendingAppointments, activeChats, overdueInvoices] = await Promise.all([
-      Appointment.countDocuments({ status: 'pending' }),
-      Conversation.countDocuments({ updatedAt: { $gte: oneHourAgo } }).catch(() => 0),
-      Appointment.countDocuments({ date: { $lt: yesterday }, status: { $in: ['pending', 'confirmed'] } })
-    ]);
+const addActiveChatSocket = (conversationId, socketId) => {
+  if (!activeChatRooms.has(conversationId)) activeChatRooms.set(conversationId, new Set());
+  activeChatRooms.get(conversationId).add(socketId);
+};
 
-    io.to('admin-notifications').emit('admin-realtime-stats', {
-      onlineUsers: onlineUsers.size,
-      pendingAppointments,
-      activeChats,
-      overdueInvoices
-    });
-  } catch (err) {
-    // Fallback: at least send online count
-    io.to('admin-notifications').emit('admin-realtime-stats', {
-      onlineUsers: onlineUsers.size,
-      pendingAppointments: 0,
-      activeChats: 0,
-      overdueInvoices: 0
-    });
+const removeActiveChatSocket = (conversationId, socketId) => {
+  const sockets = activeChatRooms.get(conversationId);
+  if (!sockets) return;
+  sockets.delete(socketId);
+  if (sockets.size === 0) activeChatRooms.delete(conversationId);
+};
+
+const removeSocketFromAllActiveChats = (socketId) => {
+  for (const [conversationId, sockets] of activeChatRooms.entries()) {
+    sockets.delete(socketId);
+    if (sockets.size === 0) activeChatRooms.delete(conversationId);
   }
 };
 
-// Periodic broadcast every 30s
-setInterval(broadcastRealtimeStats, 30000);
+// Presence comes from authenticated heartbeats, not raw Socket.IO connections.
+// This avoids counting one person multiple times when Dashboard, notifications,
+// chat, and meeting widgets each open their own socket.
+const getOnlinePresenceStats = async () => {
+  if (mongoose.connection.readyState !== 1) {
+    return { users: 0, clients: 0, lawyers: 0, admins: 0, totalAuthenticated: 0 };
+  }
 
-// Expose for /stats endpoint
-app.set('onlineUsers', onlineUsers);
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000);
+  const grouped = await User.aggregate([
+    {
+      $match: {
+        isActive: true,
+        activeSessionToken: { $ne: null },
+        lastHeartbeat: { $gte: cutoff }
+      }
+    },
+    { $group: { _id: '$role', count: { $sum: 1 } } }
+  ]);
+
+  const counts = { client: 0, lawyer: 0, admin: 0 };
+  for (const row of grouped) {
+    if (Object.prototype.hasOwnProperty.call(counts, row._id)) counts[row._id] = row.count;
+  }
+
+  // "Online Users" intentionally means end users of the platform (clients + lawyers).
+  // Admin sessions are returned separately so the admin viewing the dashboard
+  // does not inflate the user metric.
+  return {
+    users: counts.client + counts.lawyer,
+    clients: counts.client,
+    lawyers: counts.lawyer,
+    admins: counts.admin,
+    totalAuthenticated: counts.client + counts.lawyer + counts.admin
+  };
+};
+
+const getRealtimePlatformStats = async () => {
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [presence, pendingAppointments, overdueAppointments] = await Promise.all([
+    getOnlinePresenceStats(),
+    Appointment.countDocuments({ status: 'pending' }),
+    Appointment.countDocuments({
+      date: { $lt: yesterday },
+      status: { $in: ['pending', 'confirmed'] }
+    })
+  ]);
+
+  return {
+    online: presence,
+    pendingAppointments,
+    activeChats: activeChatRooms.size,
+    overdueAppointments,
+    socketConnections: connectedSockets.size,
+    timestamp: new Date().toISOString()
+  };
+};
+
+// Broadcast full real-time stats to admin room.
+const broadcastRealtimeStats = async () => {
+  try {
+    const stats = await getRealtimePlatformStats();
+    io.to('admin-notifications').emit('admin-realtime-stats', {
+      onlineUsers: stats.online.users,
+      onlineClients: stats.online.clients,
+      onlineLawyers: stats.online.lawyers,
+      onlineAdmins: stats.online.admins,
+      pendingAppointments: stats.pendingAppointments,
+      activeChats: stats.activeChats,
+      overdueAppointments: stats.overdueAppointments,
+      timestamp: stats.timestamp
+    });
+  } catch (err) {
+    console.error('Failed to broadcast real-time admin stats:', err.message);
+  }
+};
+
+// Keep dashboard fresh even when a database change came from a path that
+// does not explicitly trigger a socket event.
+setInterval(broadcastRealtimeStats, 15000);
+
+app.set('getOnlinePresenceStats', getOnlinePresenceStats);
+app.set('getRealtimePlatformStats', getRealtimePlatformStats);
+app.set('broadcastRealtimeStats', broadcastRealtimeStats);
 
 io.on('connection', (socket) => {
-  // Track this socket as online
-  onlineUsers.add(socket.id);
+  // Track transport connections only for diagnostics. This is NOT the user count.
+  connectedSockets.add(socket.id);
   broadcastRealtimeStats();
 
   // Admin notification room
@@ -521,12 +593,16 @@ io.on('connection', (socket) => {
   socket.on('join-chat-conversation', (conversationId) => {
     if (!conversationId) return;
     socket.join(conversationId);
+    addActiveChatSocket(conversationId, socket.id);
+    broadcastRealtimeStats();
     console.log(`User ${socket.id} joined chat conversation ${conversationId}`);
   });
 
   socket.on('leave-chat-conversation', (conversationId) => {
     if (!conversationId) return;
     socket.leave(conversationId);
+    removeActiveChatSocket(conversationId, socket.id);
+    broadcastRealtimeStats();
     console.log(`User ${socket.id} left chat conversation ${conversationId}`);
   });
 
@@ -748,8 +824,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', async () => {
-    // Remove from online users and broadcast
-    onlineUsers.delete(socket.id);
+    connectedSockets.delete(socket.id);
+    removeSocketFromAllActiveChats(socket.id);
     broadcastRealtimeStats();
     console.log('User disconnected:', socket.id);
     const rooms = Array.from(socket.rooms).filter((room) => room !== socket.id);
