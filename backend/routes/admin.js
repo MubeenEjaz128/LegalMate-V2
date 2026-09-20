@@ -1252,13 +1252,35 @@ router.get('/analytics', auth, requireAdmin, async (req, res) => {
       ]),
       User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
       Appointment.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-      Appointment.aggregate([
-        { $match: { status: 'completed', amount: { $exists: true, $ne: null } } },
-        { $group: { _id: null, totalRevenue: { $sum: '$amount' }, count: { $sum: 1 } } }
+      // Actual platform revenue = admin commission transactions, net of admin-side refund reversals.
+      WalletTransaction.aggregate([
+        {
+          $match: {
+            $or: [
+              { type: 'COMMISSION' },
+              { type: 'ADJUSTMENT', reference: /^REFUND-ADMIN-/ }
+            ]
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: '$amountPkr' },
+            count: { $sum: { $cond: [{ $eq: ['$type', 'COMMISSION'] }, 1, 0] } }
+          }
+        }
       ]),
-      Appointment.aggregate([
-        { $match: { status: 'completed', amount: { $exists: true, $ne: null }, createdAt: { $gte: sevenDaysAgo } } },
-        { $group: { _id: null, revenue: { $sum: '$amount' } } }
+      WalletTransaction.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: sevenDaysAgo },
+            $or: [
+              { type: 'COMMISSION' },
+              { type: 'ADJUSTMENT', reference: /^REFUND-ADMIN-/ }
+            ]
+          }
+        },
+        { $group: { _id: null, revenue: { $sum: '$amountPkr' } } }
       ]),
       (async () => {
         try {
