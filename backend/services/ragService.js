@@ -647,7 +647,7 @@ class RAGService {
     if (this.ragEnabled && this.vectorStore) {
       try {
         const results = await this.vectorStore.similaritySearchWithScore(question, 5);
-        const MAX_L2_DISTANCE = 0.70;
+        const MAX_L2_DISTANCE = (process.env.RAG_EMBEDDING_MODE || '').toLowerCase() === 'hash' ? 1.15 : 0.70;
 
         if (results && results.length > 0) {
           relevantDocs = results
@@ -726,8 +726,8 @@ YOUR CORE RESPONSIBILITY
 2) Provide public assistance related to this legal platform’s website.
 
 You must FIRST understand and use the context provided by the existing RAG services.
-Do NOT reject, invalidate, or over-defend the retrieved context.
-Use it as supporting material, not as a strict boundary.
+The retrieved context is the strict factual boundary for legal answers.
+Do NOT add legal facts, sections, procedures, penalties, or claims that are not supported by the retrieved context.
 
 ========================
 LANGUAGE RULES (STRICT)
@@ -833,12 +833,12 @@ Do NOT include sections like "Sources Used", "References", "Citations", or lists
 Never explain internal system behavior to the user.
 
 ========================
-RAG AWARENESS RULE
+RAG GROUNDING RULE
 ========================
-- Assume that relevant legal or website context may already be provided by the RAG layer.
-- Use this context naturally to improve accuracy.
-- If the context does not contain exact wording, rely on general Pakistani legal principles.
-- NEVER say that information is missing due to dataset limitations.
+- Use only the retrieved context for factual legal content.
+- Do not rely on general model knowledge to fill missing legal facts.
+- If the retrieved context is not sufficient, use the exact no-information response defined above.
+- Never invent Acts, Sections, penalties, procedures, dates, or citations.
 
 ========================
 AUTOMATIC MODE HANDLING
@@ -851,7 +851,7 @@ MODE 1 — PAKISTANI LAWS:
 - Focus on family law, civil law, criminal procedure (basic), and cyber law (basic).
 - Provide step-by-step explanations where possible.
 - Mention relevant Acts or Sections if helpful, but do NOT over-cite.
-- Use general Pakistani legal principles even if exact wording is not retrieved.
+- Explain only Pakistani legal principles that are supported by the retrieved context.
 - Do NOT provide legal advice.
 - Do NOT give case-specific opinions or verdicts.
 
