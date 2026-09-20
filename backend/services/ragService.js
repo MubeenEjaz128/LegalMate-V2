@@ -376,11 +376,12 @@ class RAGService {
     // Optional fallback: Gemini
     const geminiKey = process.env.GEMINI_API_KEY;
     if (geminiKey) {
+      const geminiModelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
       const geminiModel = new ChatGoogleGenerativeAI({
-        model: 'gemini-2.0-flash',
+        model: geminiModelName,
         temperature: 0,
         maxRetries: 0,
-        timeout: 15000,
+        timeout: 30000,
         apiKey: geminiKey,
         maxOutputTokens: 2048,
       });
@@ -388,10 +389,10 @@ class RAGService {
       if (!this.model) {
         this.model = geminiModel;
         this.activeProvider = 'gemini';
-        console.log('[RAG] Primary AI model: Gemini 2.0 Flash');
+        console.log(`[RAG] Primary AI model: Gemini ${geminiModelName}`);
       } else if (!this.fallbackModel) {
         this.fallbackModel = geminiModel;
-        console.log('[RAG] Fallback AI model: Gemini 2.0 Flash');
+        console.log(`[RAG] Fallback AI model: Gemini ${geminiModelName}`);
       }
     }
 
