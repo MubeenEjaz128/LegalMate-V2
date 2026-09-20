@@ -190,7 +190,7 @@ class RAGService {
     this.model = null;
     this.fallbackModel = null;
     this.localModel = null;  // Ollama — 3rd fallback (local LLM)
-    this.activeProvider = null; // 'perplexity', 'gemini', or 'ollama'
+    this.activeProvider = null; // 'codecraft', 'perplexity', or 'gemini'
     this.deadProviders = new Set(); // Track permanently failed cloud providers
     this.isInitialized = false;
     this.ragEnabled = true;
@@ -203,70 +203,86 @@ class RAGService {
 
     console.log('Initializing RAG Service...');
 
-    // Initialize PRIMARY model: Perplexity Sonar
-    const perplexityKey = process.env.PERPLEXITY_API_KEY;
-    if (perplexityKey) {
+    // Initialize PRIMARY model: CodeCraft (OpenAI-compatible)
+    const codecraftKey = process.env.CODECRAFT_API_KEY;
+    const codecraftBaseUrl = process.env.CODECRAFT_BASE_URL || 'https://codecraftapi.com/v1';
+    const codecraftModel = process.env.CODECRAFT_MODEL || 'gpt-5.6-sol';
+
+    if (codecraftKey) {
       this.model = new ChatOpenAI({
-        modelName: "sonar",
+        model: codecraftModel,
         temperature: 0,
-        maxRetries: 0, // Fail instantly instead of waiting 4+ mins on quota errors
-        timeout: 5000, // 5s timeout
-        apiKey: perplexityKey,
+        maxRetries: 1,
+        timeout: 60000,
+        apiKey: codecraftKey,
         configuration: {
-          baseURL: "https://api.perplexity.ai",
+          baseURL: codecraftBaseUrl,
         },
       });
-      this.activeProvider = 'perplexity';
-      console.log('[RAG] Primary AI model: Perplexity Sonar');
+      this.activeProvider = 'codecraft';
+      console.log(`[RAG] Primary AI model: CodeCraft ${codecraftModel}`);
     }
 
-    // Initialize FALLBACK model: Gemini 2.0 Flash (cheapest)
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (geminiKey) {
-      this.fallbackModel = new ChatGoogleGenerativeAI({
-        model: "gemini-2.0-flash",
+    // Optional fallback: Perplexity
+    const perplexityKey = process.env.PERPLEXITY_API_KEY;
+    if (perplexityKey) {
+      const perplexityModel = new ChatOpenAI({
+        model: 'sonar',
         temperature: 0,
-        maxRetries: 0, 
-        timeout: 5000,
-        apiKey: geminiKey,
-        maxOutputTokens: 2048,
+        maxRetries: 0,
+        timeout: 15000,
+        apiKey: perplexityKey,
+        configuration: {
+          baseURL: 'https://api.perplexity.ai',
+        },
       });
-      console.log('[RAG] Fallback AI model: Gemini 2.0 Flash');
 
-      // If no primary model, use Gemini as primary
       if (!this.model) {
-        this.model = this.fallbackModel;
-        this.fallbackModel = null;
-        this.activeProvider = 'gemini';
-        console.log('[RAG] Using Gemini as primary (no Perplexity key)');
+        this.model = perplexityModel;
+        this.activeProvider = 'perplexity';
+        console.log('[RAG] Primary AI model: Perplexity Sonar');
+      } else if (!this.fallbackModel) {
+        this.fallbackModel = perplexityModel;
+        console.log('[RAG] Fallback AI model: Perplexity Sonar');
       }
     }
 
-    // Initialize LOCAL model: Ollama (3rd fallback — always available)
-    const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-    const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2:3b';
-    try {
+    // Optional fallback: Gemini
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (geminiKey) {
+      const geminiModel = new ChatGoogleGenerativeAI({
+        model: 'gemini-2.0-flash',
+        temperature: 0,
+        maxRetries: 0,
+        timeout: 15000,
+        apiKey: geminiKey,
+        maxOutputTokens: 2048,
+      });
+
+      if (!this.model) {
+        this.model = geminiModel;
+        this.activeProvider = 'gemini';
+        console.log('[RAG] Primary AI model: Gemini 2.0 Flash');
+      } else if (!this.fallbackModel) {
+        this.fallbackModel = geminiModel;
+        console.log('[RAG] Fallback AI model: Gemini 2.0 Flash');
+      }
+    }
+
+    // Ollama is opt-in only. Do not silently use localhost in production.
+    if (process.env.ENABLE_OLLAMA_FALLBACK === 'true') {
+      const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+      const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2:3b';
       this.localModel = new OllamaClient({
         baseUrl: ollamaBaseUrl,
         model: ollamaModel,
         temperature: 0,
       });
-      console.log(`[RAG] Local fallback AI model: Ollama (${ollamaModel}) @ ${ollamaBaseUrl}`);
-
-
-      // If still no primary model, use Ollama as primary
-      if (!this.model) {
-        this.model = this.localModel;
-        this.localModel = null;
-        this.activeProvider = 'ollama';
-        console.log('[RAG] Using Ollama as primary (no cloud API keys)');
-      }
-    } catch (ollamaErr) {
-      console.warn('[RAG] Could not initialize Ollama local model:', ollamaErr.message);
+      console.log(`[RAG] Optional local fallback enabled: Ollama (${ollamaModel})`);
     }
 
     if (!this.model) {
-      console.error('[RAG] No AI model available. Set PERPLEXITY_API_KEY, GEMINI_API_KEY, or ensure Ollama is running.');
+      console.error('[RAG] No cloud AI model configured. Set CODECRAFT_API_KEY (recommended), PERPLEXITY_API_KEY, or GEMINI_API_KEY.');
     }
 
     const HNSW = await resolveUsableHNSWLib();
@@ -475,6 +491,15 @@ class RAGService {
   async query(question, chatHistory = []) {
     if (!this.isInitialized) {
       await this.initialize();
+    }
+
+    const normalizedQuestion = String(question || '').trim();
+    const isGreeting = /^(hi|hii+|hey|hello|hy|salam|assalam(?:\s*o\s*alaikum)?|aoa)[!.?\s]*$/i.test(normalizedQuestion);
+    if (isGreeting) {
+      return {
+        answer: "Hello! I am your AI legal assistant. I can help with Pakistani laws and website-related guidance.",
+        sources: []
+      };
     }
 
     // Must have at least one AI model
@@ -897,70 +922,41 @@ ${input.history || 'None'}`;
   async _invokeWithFallback(chain, input) {
     const promptTemplate = chain.first;
 
-    // ── Skip directly to Ollama if both cloud providers are dead ──
-    const bothCloudDead = this.deadProviders.has('perplexity') && this.deadProviders.has('gemini');
-    const primaryIsDead = this.activeProvider && this.deadProviders.has(this.activeProvider);
-
-    if (bothCloudDead && this.localModel) {
-      console.log('[RAG] Both cloud APIs dead — using Ollama directly.');
-      try {
-        return await this._invokeOllamaDirect(promptTemplate, input);
-      } catch (ollamaErr) {
-        throw new Error('Ollama local model also failed: ' + ollamaErr.message);
-      }
-    }
-
     try {
-      if (primaryIsDead) throw new Error(`Provider ${this.activeProvider} is known dead, skipping.`);
       return await chain.invoke(input);
     } catch (primaryError) {
-      const errMsg = primaryError?.message || '';
-      const isQuotaOrAuth = /401|403|429|auth|quota|rate.?limit|resource.?exhausted|invalid.?api.?key/i.test(errMsg);
+      const primaryMessage = primaryError?.message || String(primaryError);
+      console.error(`[RAG] Primary provider (${this.activeProvider || 'unknown'}) failed: ${primaryMessage.substring(0, 300)}`);
 
-      // Mark primary as dead if auth/quota error
-      if (isQuotaOrAuth && this.activeProvider) {
-        this.deadProviders.add(this.activeProvider);
-        console.warn(`[RAG] Marking ${this.activeProvider} as dead (auth/quota error).`);
-      }
-
-      // ── 1st fallback: Gemini ──
-      if (this.fallbackModel && !this.deadProviders.has('gemini')) {
-        console.warn(`[RAG] Primary (${this.activeProvider}) failed. Trying Gemini...`);
-        const fallbackChain = RunnableSequence.from([promptTemplate, this.fallbackModel, new StringOutputParser()]);
-
+      if (this.fallbackModel) {
         try {
+          console.warn('[RAG] Trying configured cloud fallback model...');
+          const fallbackChain = RunnableSequence.from([
+            promptTemplate,
+            this.fallbackModel,
+            new StringOutputParser()
+          ]);
           const result = await fallbackChain.invoke(input);
-          console.log('[RAG] Gemini fallback succeeded.');
-          const oldPrimary = this.model;
-          this.model = this.fallbackModel;
-          this.fallbackModel = oldPrimary;
-          this.activeProvider = this.activeProvider === 'perplexity' ? 'gemini' : 'perplexity';
+          console.log('[RAG] Cloud fallback succeeded.');
           return result;
-        } catch (geminiError) {
-          const geminiErrMsg = geminiError?.message || '';
-          if (/401|403|429|auth|quota|rate.?limit|resource.?exhausted/i.test(geminiErrMsg)) {
-            this.deadProviders.add('gemini');
-            console.warn('[RAG] Marking Gemini as dead (auth/quota error).');
-          }
-          console.warn('[RAG] Gemini also failed.');
+        } catch (fallbackError) {
+          console.error('[RAG] Cloud fallback failed:', (fallbackError?.message || String(fallbackError)).substring(0, 300));
         }
       }
 
-      // ── Final fallback: Ollama (local) ──
       if (this.localModel) {
-        console.warn('[RAG] Trying Ollama local LLM...');
         try {
-          const localResult = await this._invokeOllamaDirect(promptTemplate, input);
-          console.log('[RAG] Ollama succeeded.');
-          return localResult;
+          console.warn('[RAG] Trying explicitly enabled Ollama fallback...');
+          return await this._invokeOllamaDirect(promptTemplate, input);
         } catch (ollamaError) {
-          console.error('[RAG] Ollama failed:', ollamaError?.message?.substring(0, 100));
+          console.error('[RAG] Ollama fallback failed:', (ollamaError?.message || String(ollamaError)).substring(0, 300));
         }
       }
 
       throw primaryError;
     }
   }
+
 
   formatResponse(text) {
     if (!text) return "";
