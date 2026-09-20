@@ -69,7 +69,7 @@ class OllamaClient {
   }
 }
 class CodeCraftClient {
-  constructor({ apiKey, baseUrl = 'https://codecraftapi.com/v1', model = 'gpt-5.6-sol', temperature = 0, timeout = 90000 } = {}) {
+  constructor({ apiKey, baseUrl = 'https://www.codecraftapi.com/v1', model = 'gpt-5.6-luna', temperature = 0, timeout = 120000 } = {}) {
     this.apiKey = apiKey;
     this.baseUrl = String(baseUrl).replace(/\/$/, '');
     this.model = model;
@@ -77,36 +77,103 @@ class CodeCraftClient {
     this.timeout = timeout;
   }
 
-  async healthCheck() {
+  async _streamChat(messages, { maxTokens = 4096, timeout = this.timeout } = {}) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     try {
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify({
           model: this.model,
-          messages: [{ role: 'user', content: 'Reply with OK only.' }],
-          temperature: 0,
-          stream: false,
-          max_tokens: 8
+          messages,
+          temperature: this.temperature,
+          stream: true,
+          max_tokens: maxTokens
         }),
         signal: controller.signal
       });
 
-      const raw = await response.text();
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${raw.slice(0, 300)}`);
+        const raw = await response.text();
+        const error = new Error(`CodeCraft HTTP ${response.status}: ${raw.slice(0, 500)}`);
+        error.status = response.status;
+        throw error;
       }
-      const data = raw ? JSON.parse(raw) : {};
-      return data?.choices?.[0]?.message?.content || 'OK';
+
+      if (!response.body) {
+        throw new Error('CodeCraft returned no streaming response body.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let content = '';
+      let sawDone = false;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(':')) continue; // SSE keep-alive/comment
+          if (!trimmed.startsWith('data:')) continue;
+
+          const payload = trimmed.slice(5).trim();
+          if (payload === '[DONE]') {
+            sawDone = true;
+            continue;
+          }
+
+          let event;
+          try {
+            event = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+
+          if (event?.error) {
+            const providerMessage = event.error.message || JSON.stringify(event.error);
+            throw new Error(`CodeCraft streaming provider error: ${providerMessage}`);
+          }
+
+          const delta = event?.choices?.[0]?.delta?.content;
+          if (typeof delta === 'string') content += delta;
+        }
+
+        if (sawDone) break;
+      }
+
+      if (!content.trim()) {
+        throw new Error('CodeCraft stream completed without visible response content.');
+      }
+
+      return content.trim();
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error(`CodeCraft streaming request timed out after ${Math.round(timeout / 1000)} seconds.`);
+      }
+      throw error;
     } finally {
       clearTimeout(timeoutId);
     }
+  }
+
+  async healthCheck() {
+    return this._streamChat(
+      [{ role: 'user', content: 'Reply with OK only.' }],
+      { maxTokens: 4096, timeout: 45000 }
+    );
   }
 
   async invokePrompt(promptTemplate, input) {
@@ -136,56 +203,7 @@ class CodeCraftClient {
       };
     });
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
-    try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages,
-          temperature: this.temperature,
-          stream: false,
-          max_tokens: 1200
-        }),
-        signal: controller.signal
-      });
-
-      const raw = await response.text();
-      let data = null;
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch {
-        data = { raw };
-      }
-
-      if (!response.ok) {
-        const providerMessage = data?.error?.message || data?.message || raw || response.statusText;
-        const error = new Error(`CodeCraft HTTP ${response.status}: ${String(providerMessage).slice(0, 500)}`);
-        error.status = response.status;
-        throw error;
-      }
-
-      const content = data?.choices?.[0]?.message?.content;
-      if (typeof content !== 'string' || !content.trim()) {
-        throw new Error('CodeCraft returned an empty chat-completions response.');
-      }
-
-      return content.trim();
-    } catch (error) {
-      if (error?.name === 'AbortError') {
-        throw new Error(`CodeCraft chat-completions timed out after ${Math.round(this.timeout / 1000)} seconds.`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return this._streamChat(messages, { maxTokens: 4096 });
   }
 }
 
