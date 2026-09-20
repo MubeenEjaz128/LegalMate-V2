@@ -53,7 +53,16 @@ exports.chat = async (req, res) => {
       answerResponse = await ragService.query(question, chatHistory);
     } catch (error) {
       console.error('RAG Error:', error);
-      answerResponse = { answer: "I'm sorry, I encountered an error processing your request.", sources: [] };
+      const status = error?.status || error?.response?.status;
+      const code = error?.lc_error_code || error?.code;
+      const isAuthError = status === 401 || code === 'MODEL_AUTHENTICATION';
+
+      answerResponse = {
+        answer: isAuthError
+          ? "The AI service is temporarily unavailable because its provider authentication needs to be refreshed. Please try again shortly."
+          : "I'm sorry, I encountered an error processing your request.",
+        sources: []
+      };
     }
 
     // Deconstruct response
