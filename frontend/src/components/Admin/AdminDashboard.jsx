@@ -88,9 +88,24 @@ const AdminDashboard = () => {
 
     initializeData()
 
-    // Poll real-time stats every 2 minutes (reduced from 60s)
-    const interval = setInterval(fetchRealtimeStats, 120000)
-    return () => clearInterval(interval)
+    // Socket.IO is primary for live activity. Polling is a safety net in case
+    // a websocket is blocked or the browser resumes from sleep.
+    const realtimeInterval = setInterval(fetchRealtimeStats, 30000)
+    const analyticsInterval = setInterval(fetchAnalytics, 60000)
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchRealtimeStats()
+        fetchAnalytics()
+      }
+    }
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      clearInterval(realtimeInterval)
+      clearInterval(analyticsInterval)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
   }, []) // Empty dependency array to run only once
 
   const fetchPendingLawyers = async () => {
@@ -744,6 +759,8 @@ const OverviewTab = ({
 }) => {
   // Real-time stats via socket
   const [liveStats, setLiveStats] = useState(null)
+  const [socketConnected, setSocketConnected] = useState(false)
+  const [lastLiveUpdate, setLastLiveUpdate] = useState(null)
   const socketRef = useRef(null)
 
   useEffect(() => {
@@ -756,11 +773,21 @@ const OverviewTab = ({
     socketRef.current = socket
 
     socket.on('connect', () => {
+      setSocketConnected(true)
       socket.emit('join-admin-notifications')
+    })
+
+    socket.on('disconnect', () => {
+      setSocketConnected(false)
+    })
+
+    socket.on('connect_error', () => {
+      setSocketConnected(false)
     })
 
     socket.on('admin-realtime-stats', (data) => {
       setLiveStats(data)
+      setLastLiveUpdate(data?.timestamp ? new Date(data.timestamp) : new Date())
     })
 
     return () => {
@@ -770,9 +797,11 @@ const OverviewTab = ({
   }, [])
 
   const onlineCount = liveStats?.onlineUsers ?? (realtimeStats?.online?.users || 0)
+  const onlineClients = liveStats?.onlineClients ?? (realtimeStats?.online?.clients || 0)
+  const onlineLawyers = liveStats?.onlineLawyers ?? (realtimeStats?.online?.lawyers || 0)
   const pendingCount = liveStats?.pendingAppointments ?? (realtimeStats?.active?.pendingAppointments || 0)
   const activeChatsCount = liveStats?.activeChats ?? (realtimeStats?.active?.activeChats || 0)
-  const overdueCount = liveStats?.overdueInvoices ?? (realtimeStats?.active?.overdueInvoices || 0)
+  const overdueCount = liveStats?.overdueAppointments ?? (realtimeStats?.active?.overdueAppointments || 0)
   // Show loading skeleton if analytics is not yet loaded
   if (!analytics) {
     return (
@@ -802,6 +831,13 @@ const OverviewTab = ({
   const chats = analytics.chats || { total: 0, inPeriod: 0 };
   const invoices = analytics.invoices || { paid: 0, overdue: 0, total: 0 };
   const feedback = analytics.feedback || { averageRating: 0, total: 0 };
+
+  const statColorClasses = {
+    blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
+    green: { bg: 'bg-green-100', text: 'text-green-600' },
+    purple: { bg: 'bg-purple-100', text: 'text-purple-600' },
+    orange: { bg: 'bg-orange-100', text: 'text-orange-600' }
+  }
 
   const stats = [
     {
@@ -844,10 +880,21 @@ const OverviewTab = ({
 
       {/* Real-time Stats */}
       <div className="mb-8 p-4 bg-primary-50 rounded-lg">
-        <h3 className="text-lg font-semibold text-primary-900 mb-4 flex items-center gap-2">
-          <Activity className="h-5 w-5" />
-          Real-time Activity
-        </h3>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-primary-900 flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Real-time Activity
+          </h3>
+          <div className="flex items-center gap-2 text-xs text-primary-700">
+            <span className={`h-2 w-2 rounded-full ${socketConnected ? 'bg-green-500' : 'bg-secondary-400'}`} />
+            <span>{socketConnected ? 'Live' : 'Polling fallback'}</span>
+            {lastLiveUpdate && (
+              <span className="text-secondary-500">
+                · updated {lastLiveUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
             <div className="text-2xl font-bold text-primary-600 flex items-center justify-center gap-1.5">
@@ -858,6 +905,9 @@ const OverviewTab = ({
               {onlineCount}
             </div>
             <div className="text-sm text-primary-700">Online Users</div>
+            <div className="mt-1 text-[11px] text-primary-600">
+              {onlineClients} clients · {onlineLawyers} lawyers
+            </div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-green-600">{pendingCount}</div>
@@ -869,7 +919,7 @@ const OverviewTab = ({
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-red-600">{overdueCount}</div>
-            <div className="text-sm text-red-700">Overdue Invoices</div>
+            <div className="text-sm text-red-700">Overdue Appointments</div>
           </div>
         </div>
       </div>
@@ -888,8 +938,8 @@ const OverviewTab = ({
                     +{stat.change} {stat.changeLabel}
                   </p>
                 </div>
-                <div className={`p-3 bg-${stat.color}-100 rounded-lg`}>
-                  <Icon className={`h-6 w-6 text-${stat.color}-600`} />
+                <div className={`p-3 rounded-lg ${statColorClasses[stat.color]?.bg || 'bg-secondary-100'}`}>
+                  <Icon className={`h-6 w-6 ${statColorClasses[stat.color]?.text || 'text-secondary-600'}`} />
                 </div>
               </div>
             </div>
