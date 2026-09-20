@@ -69,7 +69,6 @@ class OllamaClient {
   }
 }
 let HNSWLib = null;
-let transformersPipeline = null;
 
 const tryLoadHNSWLib = () => {
   if (HNSWLib) {
@@ -234,14 +233,12 @@ class HashEmbeddings {
 }
 
 const createEmbeddings = () => {
-  const mode = (process.env.RAG_EMBEDDING_MODE || 'transformer').toLowerCase();
-  if (mode === 'hash') {
-    console.log('[RAG] Using fast hash embeddings for retrieval.');
-    return new HashEmbeddings({
-      dimensions: parseInt(process.env.RAG_HASH_DIMENSIONS || '512', 10)
-    });
-  }
-  return new LocalEmbeddings();
+  // Production-safe deterministic embeddings. This avoids loading the large
+  // Transformers/ONNX native dependency tree and keeps Render memory stable.
+  console.log('[RAG] Using fast hash embeddings for retrieval.');
+  return new HashEmbeddings({
+    dimensions: parseInt(process.env.RAG_HASH_DIMENSIONS || '256', 10)
+  });
 };
 
 const { RecursiveCharacterTextSplitter } = require('@langchain/textsplitters');
