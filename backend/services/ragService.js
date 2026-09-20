@@ -240,7 +240,7 @@ const createEmbeddings = () => {
       dimensions: parseInt(process.env.RAG_HASH_DIMENSIONS || '512', 10)
     });
   }
-  return createEmbeddings();
+  return new LocalEmbeddings();
 };
 
 const { RecursiveCharacterTextSplitter } = require('@langchain/textsplitters');
