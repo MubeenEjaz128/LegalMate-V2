@@ -178,6 +178,71 @@ class LocalEmbeddings {
     return Array.from(output.data);
   }
 }
+
+class HashEmbeddings {
+  constructor({ dimensions = 512 } = {}) {
+    this.dimensions = dimensions;
+  }
+
+  _hash(str, seed = 2166136261) {
+    let h = seed >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  _embed(text) {
+    const vector = new Array(this.dimensions).fill(0);
+    const tokens = String(text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06ff]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const features = [];
+    for (let i = 0; i < tokens.length; i++) {
+      features.push(tokens[i]);
+      if (i + 1 < tokens.length) features.push(tokens[i] + '_' + tokens[i + 1]);
+    }
+
+    for (const feature of features) {
+      const h1 = this._hash(feature);
+      const h2 = this._hash(feature, 0x9e3779b1);
+      const index = h1 % this.dimensions;
+      const sign = (h2 & 1) === 0 ? 1 : -1;
+      vector[index] += sign;
+    }
+
+    let norm = 0;
+    for (const value of vector) norm += value * value;
+    norm = Math.sqrt(norm) || 1;
+    for (let i = 0; i < vector.length; i++) vector[i] /= norm;
+    return vector;
+  }
+
+  async embedDocuments(texts) {
+    return texts.map((text) => this._embed(text));
+  }
+
+  async embedQuery(text) {
+    return this._embed(text);
+  }
+}
+
+const createEmbeddings = () => {
+  const mode = (process.env.RAG_EMBEDDING_MODE || 'transformer').toLowerCase();
+  if (mode === 'hash') {
+    console.log('[RAG] Using fast hash embeddings for retrieval.');
+    return new HashEmbeddings({
+      dimensions: parseInt(process.env.RAG_HASH_DIMENSIONS || '512', 10)
+    });
+  }
+  return createEmbeddings();
+};
+
 const { RecursiveCharacterTextSplitter } = require('@langchain/textsplitters');
 const { Document } = require('@langchain/core/documents');
 const { StringOutputParser } = require('@langchain/core/output_parsers');
@@ -295,7 +360,7 @@ class RAGService {
     }
 
     // Initialize Embeddings (Local - Free)
-    const embeddings = new LocalEmbeddings();
+    const embeddings = createEmbeddings();
 
     // Check if vector store exists on disk
     if (fs.existsSync(this.vectorStorePath)) {
@@ -406,7 +471,7 @@ class RAGService {
       const batch_docs = allDocuments.slice(i, i + ADD_BATCH_SIZE);
 
       if (!this.vectorStore) {
-        const embeddings = new LocalEmbeddings();
+        const embeddings = createEmbeddings();
         this.vectorStore = await HNSW.fromDocuments(batch_docs, embeddings);
       } else {
         await this.vectorStore.addDocuments(batch_docs);
@@ -425,7 +490,7 @@ class RAGService {
       throw new Error('Cannot build vector store because hnswlib-node runtime is unavailable.');
     }
 
-    const embeddings = new LocalEmbeddings();
+    const embeddings = createEmbeddings();
     let store = null;
     const batchSize = Math.max(25, parseInt(process.env.RAG_BUILD_BATCH_SIZE || '100', 10));
 
