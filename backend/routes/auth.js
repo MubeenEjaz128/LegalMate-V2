@@ -187,6 +187,11 @@ router.post('/login', [
     user.lastHeartbeat = new Date();
     await user.save({ validateBeforeSave: false });
 
+    const broadcastRealtimeStats = req.app.get('broadcastRealtimeStats');
+    if (typeof broadcastRealtimeStats === 'function') {
+      broadcastRealtimeStats().catch(() => {});
+    }
+
     console.log('✅ Login successful for:', user.name)
 
     res.json({
@@ -383,6 +388,10 @@ router.post('/logout', auth, async (req, res) => {
   try {
     // Clear active session so token can't be reused
     await User.findByIdAndUpdate(req.user.userId, { activeSessionToken: null, lastHeartbeat: null });
+    const broadcastRealtimeStats = req.app.get('broadcastRealtimeStats');
+    if (typeof broadcastRealtimeStats === 'function') {
+      broadcastRealtimeStats().catch(() => {});
+    }
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout error:', error);
@@ -394,6 +403,10 @@ router.post('/logout', auth, async (req, res) => {
 router.post('/heartbeat', auth, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.user.userId, { lastHeartbeat: new Date() });
+    const broadcastRealtimeStats = req.app.get('broadcastRealtimeStats');
+    if (typeof broadcastRealtimeStats === 'function') {
+      broadcastRealtimeStats().catch(() => {});
+    }
     res.json({ ok: true });
   } catch (error) {
     res.json({ ok: true });
