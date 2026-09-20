@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "postinstall": "node scripts/build_rag_index.js && node scripts/audit_dependencies.js"
+    "postinstall": "node scripts/build_rag_index.js"
   },
   "dependencies": {
     "@langchain/community": "^1.1.29",
