@@ -636,17 +636,35 @@ class RAGService {
       };
     }
 
-    // Topic Detection (before RAG retrieval for efficiency)
-    const isLegalQuestion = /law|legal|court|divorce|marriage|custody|crime|rights|act|section|judge|lawyer|attorney|petition|case|punjab|pakistan|قانون|طلاق|شادی/i.test(question);
-    const isWebsiteQuestion = /appointment|booking|book.*lawyer|payment|website|platform|chat|call|video|audio|service|fee/i.test(question);
+    // Build a conversation-aware retrieval query so short follow-ups like
+    // "how do I file it?" still search for the subject discussed previously.
+    const recentUserQueries = Array.isArray(chatHistory)
+      ? chatHistory.slice(-3).map((m) => String(m.userQuery || '').trim()).filter(Boolean)
+      : [];
 
-    // 1. Retrieve Relevant Context (RAG) — only if vector store available
+    const retrievalQuestion = recentUserQueries.length > 0
+      ? [...recentUserQueries, normalizedQuestion].join(' | Follow-up: ')
+      : normalizedQuestion;
+
+    // Topic Detection should consider recent conversation context too.
+    const isLegalQuestion = /law|legal|court|divorce|marriage|custody|crime|rights|act|section|judge|lawyer|attorney|petition|case|punjab|pakistan|قانون|طلاق|شادی/i.test(retrievalQuestion);
+    const isWebsiteQuestion = /appointment|booking|book.*lawyer|payment|website|platform|chat|call|video|audio|service|fee/i.test(retrievalQuestion);
+
+    // For legal questions, a working vector store is mandatory.
+    if (isLegalQuestion && (!this.ragEnabled || !this.vectorStore)) {
+      return {
+        answer: "The legal knowledge base is currently warming up. Please try again in a few minutes.",
+        sources: []
+      };
+    }
+
+    // 1. Retrieve Relevant Context (RAG)
     let relevantDocs = [];
     let contextText = "No context available";
 
     if (this.ragEnabled && this.vectorStore) {
       try {
-        const results = await this.vectorStore.similaritySearchWithScore(question, 5);
+        const results = await this.vectorStore.similaritySearchWithScore(retrievalQuestion, 8);
         const MAX_L2_DISTANCE = (process.env.RAG_EMBEDDING_MODE || '').toLowerCase() === 'hash' ? 1.15 : 0.70;
 
         if (results && results.length > 0) {
