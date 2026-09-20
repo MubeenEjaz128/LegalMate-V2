@@ -32,19 +32,19 @@
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.30.1",
     "mongoose": "^8.24.4",
-    "multer": "^1.4.5-lts.2",
+    "multer": "^2.4.0",
     "nodemailer": "^10.0.10",
     "sanitize-html": "^2.17.7",
     "simple-peer": "^9.11.1",
     "socket.io": "^4.8.3",
-    "uuid": "11.1.0"
+    "uuid": "11.1.1"
   },
   "devDependencies": {
     "jest": "^29.7.0",
     "mongodb-memory-server": "^10.3.0",
     "nodemon": "^3.1.11",
     "npm-check-updates": "^19.1.2",
-    "supertest": "^6.3.4"
+    "supertest": "^7.2.2"
   },
   "keywords": [
     "legal",
@@ -63,7 +63,7 @@
     "form-data": "^4.0.6",
     "js-yaml": "4.3.2",
     "lodash": "^4.18.1",
-    "nanoid": "3.3.17",
+    "nanoid": "3.3.18",
     "postcss": "^8.5.28",
     "qs": "^6.16.0",
     "ws": "^8.21.3",
