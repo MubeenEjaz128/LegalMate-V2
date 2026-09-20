@@ -68,6 +68,95 @@ class OllamaClient {
     };
   }
 }
+class CodeCraftClient {
+  constructor({ apiKey, baseUrl = 'https://codecraftapi.com/v1', model = 'gpt-5.6-sol', temperature = 0, timeout = 90000 } = {}) {
+    this.apiKey = apiKey;
+    this.baseUrl = String(baseUrl).replace(/\/$/, '');
+    this.model = model;
+    this.temperature = temperature;
+    this.timeout = timeout;
+  }
+
+  async invokePrompt(promptTemplate, input) {
+    const promptValue = await promptTemplate.invoke(input);
+    const lcMessages = typeof promptValue?.toChatMessages === 'function'
+      ? promptValue.toChatMessages()
+      : (promptValue?.messages || []);
+
+    const messages = lcMessages.map((message) => {
+      const type = typeof message?._getType === 'function' ? message._getType() : '';
+      const role = type === 'human'
+        ? 'user'
+        : type === 'ai'
+          ? 'assistant'
+          : 'system';
+
+      let content = message?.content;
+      if (Array.isArray(content)) {
+        content = content
+          .map((part) => typeof part === 'string' ? part : (part?.text || JSON.stringify(part)))
+          .join('\n');
+      }
+
+      return {
+        role,
+        content: typeof content === 'string' ? content : JSON.stringify(content ?? '')
+      };
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          temperature: this.temperature,
+          stream: false,
+          max_tokens: 1200
+        }),
+        signal: controller.signal
+      });
+
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = { raw };
+      }
+
+      if (!response.ok) {
+        const providerMessage = data?.error?.message || data?.message || raw || response.statusText;
+        const error = new Error(`CodeCraft HTTP ${response.status}: ${String(providerMessage).slice(0, 500)}`);
+        error.status = response.status;
+        throw error;
+      }
+
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || !content.trim()) {
+        throw new Error('CodeCraft returned an empty chat-completions response.');
+      }
+
+      return content.trim();
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error(`CodeCraft chat-completions timed out after ${Math.round(this.timeout / 1000)} seconds.`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 let HNSWLib = null;
 
 const tryLoadHNSWLib = () => {
@@ -98,86 +187,6 @@ const resolveUsableHNSWLib = async () => {
     return null;
   }
 };
-
-const tryLoadTransformersPipeline = () => {
-  if (transformersPipeline) {
-    return transformersPipeline;
-  }
-
-  try {
-    ({ pipeline: transformersPipeline } = require('@xenova/transformers'));
-    return transformersPipeline;
-  } catch (error) {
-    return null;
-  }
-};
-
-class LocalEmbeddings {
-  constructor() {
-    this.pipe = null;
-    this.modelName = 'Xenova/all-MiniLM-L6-v2';
-  }
-
-  async initialize() {
-    if (!this.pipe) {
-      const pipeline = tryLoadTransformersPipeline();
-      if (!pipeline) {
-        throw new Error('Failed to load @xenova/transformers pipeline.');
-      }
-
-      console.log('Loading local embedding model:', this.modelName);
-      this.pipe = await pipeline('feature-extraction', this.modelName);
-      console.log('Local embedding model loaded.');
-    }
-  }
-
-  async embedDocuments(texts) {
-    await this.initialize();
-    const embeddings = [];
-    const BATCH_SIZE = 16;
-
-    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-      const batch = texts.slice(i, i + BATCH_SIZE);
-      const cleanBatch = batch.map(t => t.replace(/\n/g, ' '));
-
-      try {
-        const output = await this.pipe(cleanBatch, { pooling: 'mean', normalize: true });
-        // The output for a list of inputs is a Tensor with shape [batch_size, hidden_size]
-        // We need to convert it to arrays.
-        // output.tolist() usually works for Xenova tensors
-        if (output && output.tolist) {
-          embeddings.push(...output.tolist());
-        } else if (output && output.data) {
-          // Fallback if tolist() isn't available, but for batch it's tricky with raw data
-          // Assuming tolist() exists which is standard for new transformers.js
-          embeddings.push(...output.tolist());
-        }
-      } catch (err) {
-        console.error(`Batch failed at index ${i}, falling back to single processing`, err);
-        // Fallback to single
-        for (const text of cleanBatch) {
-          const out = await this.pipe(text, { pooling: 'mean', normalize: true });
-          embeddings.push(Array.from(out.data));
-        }
-      }
-
-      // Log progress
-      if ((i + BATCH_SIZE) % 100 < BATCH_SIZE) {
-        console.log(`Embedded ${Math.min(i + BATCH_SIZE, texts.length)}/${texts.length} chunks...`);
-      }
-      // Yield to event loop
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-    return embeddings;
-  }
-
-  async embedQuery(text) {
-    await this.initialize();
-    const cleanText = text.replace(/\n/g, ' ');
-    const output = await this.pipe(cleanText, { pooling: 'mean', normalize: true });
-    return Array.from(output.data);
-  }
-}
 
 class HashEmbeddings {
   constructor({ dimensions = 512 } = {}) {
@@ -273,18 +282,15 @@ class RAGService {
     const codecraftModel = process.env.CODECRAFT_MODEL || 'gpt-5.6-sol';
 
     if (codecraftKey) {
-      this.model = new ChatOpenAI({
+      this.model = new CodeCraftClient({
+        apiKey: codecraftKey,
+        baseUrl: codecraftBaseUrl,
         model: codecraftModel,
         temperature: 0,
-        maxRetries: 0,
-        timeout: 60000,
-        apiKey: codecraftKey,
-        configuration: {
-          baseURL: codecraftBaseUrl,
-        },
+        timeout: parseInt(process.env.CODECRAFT_TIMEOUT_MS || '90000', 10)
       });
       this.activeProvider = 'codecraft';
-      console.log(`[RAG] Primary AI model: CodeCraft ${codecraftModel}`);
+      console.log(`[RAG] Primary AI model: CodeCraft ${codecraftModel} via /chat/completions`);
     }
 
     // Optional fallback: Perplexity
@@ -1200,6 +1206,9 @@ ${input.history || 'None'}`;
     const promptTemplate = chain.first;
 
     try {
+      if (this.activeProvider === 'codecraft' && this.model instanceof CodeCraftClient) {
+        return await this.model.invokePrompt(promptTemplate, input);
+      }
       return await chain.invoke(input);
     } catch (primaryError) {
       const primaryMessage = primaryError?.message || String(primaryError);
