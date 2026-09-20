@@ -8,16 +8,27 @@ async function main() {
     return;
   }
 
-  const storePath = path.join(__dirname, '../storage/vector_store_hnsw');
-  const cachePath = path.join(__dirname, '../node_modules/.cache/legalmate-rag/vector_store_hnsw');
+  const version = process.env.RAG_INDEX_VERSION || 'compact-v2';
+  const storageRoot = path.join(__dirname, '../storage');
+  const storePath = path.join(storageRoot, 'vector_store_hnsw');
+  const sourcePath = path.join(storageRoot, 'rag_sources');
+
+  const cacheRoot = path.join(__dirname, `../node_modules/.cache/legalmate-rag-${version}`);
+  const cacheStorePath = path.join(cacheRoot, 'vector_store_hnsw');
+  const cacheSourcePath = path.join(cacheRoot, 'rag_sources');
   const forceRebuild = process.env.REBUILD_RAG_INDEX === 'true';
 
-  // Render caches node_modules between builds. Reuse the built index when available.
-  if (!forceRebuild && fs.existsSync(cachePath)) {
-    fs.mkdirSync(path.dirname(storePath), { recursive: true });
+  if (
+    !forceRebuild &&
+    fs.existsSync(cacheStorePath) &&
+    fs.existsSync(cacheSourcePath)
+  ) {
+    fs.mkdirSync(storageRoot, { recursive: true });
     fs.rmSync(storePath, { recursive: true, force: true });
-    fs.cpSync(cachePath, storePath, { recursive: true });
-    console.log('[RAG Build] Restored vector store from Render build cache.');
+    fs.rmSync(sourcePath, { recursive: true, force: true });
+    fs.cpSync(cacheStorePath, storePath, { recursive: true });
+    fs.cpSync(cacheSourcePath, sourcePath, { recursive: true });
+    console.log(`[RAG Build] Restored compact RAG index ${version} from Render build cache.`);
     return;
   }
 
@@ -26,14 +37,16 @@ async function main() {
     .map((v) => v.trim())
     .filter(Boolean);
 
-  console.log('[RAG Build] Building HNSW vector store from:', files.join(', '));
+  console.log(`[RAG Build] Building compact RAG index ${version} from:`, files.join(', '));
   await ragService.buildVectorStoreFromDatasets(files);
 
-  if (fs.existsSync(storePath)) {
-    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-    fs.rmSync(cachePath, { recursive: true, force: true });
-    fs.cpSync(storePath, cachePath, { recursive: true });
-    console.log('[RAG Build] Cached vector store for future Render deploys.');
+  if (fs.existsSync(storePath) && fs.existsSync(sourcePath)) {
+    fs.mkdirSync(cacheRoot, { recursive: true });
+    fs.rmSync(cacheStorePath, { recursive: true, force: true });
+    fs.rmSync(cacheSourcePath, { recursive: true, force: true });
+    fs.cpSync(storePath, cacheStorePath, { recursive: true });
+    fs.cpSync(sourcePath, cacheSourcePath, { recursive: true });
+    console.log(`[RAG Build] Cached compact RAG index ${version} for future Render deploys.`);
   }
 
   console.log('[RAG Build] Completed successfully.');
