@@ -279,7 +279,7 @@ class RAGService {
       this.model = new ChatOpenAI({
         model: codecraftModel,
         temperature: 0,
-        maxRetries: 1,
+        maxRetries: 0,
         timeout: 60000,
         apiKey: codecraftKey,
         configuration: {
