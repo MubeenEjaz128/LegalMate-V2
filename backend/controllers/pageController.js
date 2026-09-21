@@ -60,13 +60,91 @@ const getDefaultContent = (name) => {
       name: 'developer',
       title: 'Developer Profile',
       content: {
-        name: 'Mubeen',
-        role: 'Full Stack Developer',
-        bio: 'Passionate developer building solutions for real-world problems.',
-        skills: ['React', 'Node.js', 'MongoDB', 'Python', 'AI Integration'],
-        github: 'https://github.com/mubeen',
-        linkedin: 'https://linkedin.com/in/mubeen',
-        email: 'mubeen@example.com'
+        name: 'M. Mubeen Ejaz',
+        title: 'Full-Stack Software Engineer & AI Solutions Developer',
+        eyebrow: 'Developer & Maintainer of LegalMate',
+        bio: 'I build production-grade web applications, AI-powered systems and scalable backend architectures across modern stacks. My work spans SaaS platforms, real-time applications, RAG-based AI, cloud deployments and automation.',
+        profileImage: 'https://avatars.githubusercontent.com/u/94120325?v=4',
+        location: 'Burewala, Pakistan',
+        email: 'mubeenejaz128@gmail.com',
+        github: 'https://github.com/MubeenEjaz128',
+        linkedin: 'https://www.linkedin.com/in/mubeen-ejaz/',
+        website: 'https://www.mubeenejaz.app/',
+        whatsapp: 'https://wa.me/923177099128',
+        stats: [
+          { value: '10+', label: 'Projects shipped' },
+          { value: '5+', label: 'Live deployments' },
+          { value: '3.75', label: 'BSCS CGPA' }
+        ],
+        skills: [
+          {
+            category: 'Full-Stack Web',
+            icon: 'code',
+            description: 'Modern, responsive applications with scalable APIs and real-time workflows.',
+            items: ['React.js', 'Next.js', 'TypeScript', 'JavaScript', 'Tailwind CSS', 'REST APIs', 'WebSockets']
+          },
+          {
+            category: 'Backend & Architecture',
+            icon: 'server',
+            description: 'Production-grade services, databases, authentication and systems architecture.',
+            items: ['Node.js', 'Express.js', 'Django', 'PHP Laravel', 'MongoDB', 'PostgreSQL', 'MySQL', 'Redis']
+          },
+          {
+            category: 'AI & Machine Learning',
+            icon: 'ai',
+            description: 'RAG pipelines, AI agents, LLM integrations and predictive machine-learning solutions.',
+            items: ['RAG Systems', 'AI Agents', 'OpenAI API', 'Vector DBs', 'Scikit-Learn', 'Pandas', 'NLP']
+          },
+          {
+            category: 'Cloud & DevOps',
+            icon: 'cloud',
+            description: 'Deployment, Linux administration, CI/CD and production infrastructure.',
+            items: ['Vercel', 'Render', 'Docker', 'Linux VPS', 'Nginx', 'Git/GitHub', 'PyQt']
+          }
+        ],
+        projects: [
+          {
+            name: 'LegalMate',
+            badge: 'SaaS · AI',
+            description: 'AI-powered legal consultation platform connecting clients with verified legal practitioners with RAG assistance, booking, chat and real-time video consultation.',
+            tech: ['React', 'Node.js', 'MongoDB', 'Socket.IO', 'WebRTC', 'RAG / AI'],
+            highlights: ['RAG-based legal assistant', 'Real-time video & chat', 'Appointment scheduling', 'PKR wallet workflows'],
+            live: 'https://legalmate.me',
+            github: 'https://github.com/MubeenEjaz128/LegalMate-V2'
+          },
+          {
+            name: 'SupportDesk',
+            badge: 'SaaS Platform',
+            description: 'Enterprise customer-support workspace with role-based access, ticket lifecycle management and AI-assisted response suggestions.',
+            tech: ['Django', 'React', 'MongoDB', 'AI / LLM', 'Render', 'Vercel'],
+            highlights: ['Admin / Supervisor / Agent RBAC', 'Ticket workflows', 'Customer history', 'AI reply assistance'],
+            live: 'https://support-desk-lac.vercel.app',
+            github: 'https://github.com/MubeenEjaz128/SupportDesk'
+          },
+          {
+            name: 'Bologna',
+            badge: 'Portal System',
+            description: 'Academic admission and verification portal with document workflows, certificate generation and administrative auditing.',
+            tech: ['React', 'Node.js', 'Express', 'MySQL', 'Tailwind CSS'],
+            highlights: ['Admission workflows', 'Document verification', 'PDF generation', 'Role-based admin'],
+            live: 'https://bologna-liart.vercel.app',
+            github: 'https://github.com/MubeenEjaz128/bologna'
+          }
+        ],
+        education: [
+          {
+            degree: 'Bachelor of Science in Computer Science',
+            institution: 'COMSATS University Islamabad',
+            year: '2022 — 2026',
+            description: 'CGPA 3.75 / 4.00. Focused on software engineering, databases, AI/ML, networking and production system development.'
+          }
+        ],
+        achievements: [
+          'Built and shipped 10+ software projects across SaaS, AI/ML, portals and automation.',
+          'Deployed 5+ production applications across Vercel, Render and VPS infrastructure.',
+          'Built RAG-based AI workflows and real-time WebRTC / Socket.IO systems.',
+          'Commercialized a machine-learning disease prediction solution for practical use.'
+        ]
       }
     }
   };
