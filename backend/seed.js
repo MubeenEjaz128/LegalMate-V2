@@ -30,7 +30,25 @@ const Notification    = require('./models/Notification');
 const daysAgo     = (n) => { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(14, 0, 0, 0); return d; };
 const daysFromNow = (n) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(14, 0, 0, 0); return d; };
 const randomDaysAgo = (min, max) => daysAgo(Math.floor(min + Math.random() * (max - min)));
-const randomHour  = () => `${Math.floor(9 + Math.random() * 9)}:00`;
+const appointmentTimes = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+const randomHour  = () => pick(appointmentTimes);
+
+// Track every generated appointment slot in-memory so the seeder can never
+// violate Appointment's unique { lawyer, date, time } index.
+const usedAppointmentSlots = new Set();
+const reserveAppointmentSlot = (lawyerId, dateFactory) => {
+    for (let attempt = 0; attempt < 50; attempt++) {
+        const date = dateFactory();
+        for (const time of shuffle(appointmentTimes)) {
+            const key = `${lawyerId.toString()}|${date.getTime()}|${time}`;
+            if (!usedAppointmentSlots.has(key)) {
+                usedAppointmentSlots.add(key);
+                return { date, time };
+            }
+        }
+    }
+    throw new Error(`Unable to reserve a unique appointment slot for lawyer ${lawyerId}`);
+};
 
 // ── Utility ─────────────────────────────────────────────────
 const pick   = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -418,8 +436,10 @@ async function seed() {
 
             for (let j = 0; j < count; j++) {
                 const client = usedClients[j] || pick(savedClients);
-                const ago = Math.floor(3 + Math.random() * 150); // 3-152 days ago
-                const meetDate = daysAgo(ago);
+                const { date: meetDate, time: meetTime } = reserveAppointmentSlot(
+                    lawyer._id,
+                    () => daysAgo(Math.floor(3 + Math.random() * 150)) // 3-152 days ago
+                );
 
                 // Higher-level lawyers get better feedback
                 const fb = level >= 2 ? pick(feedbackPool.slice(0, 6))
@@ -430,7 +450,7 @@ async function seed() {
                     client: client._id,
                     lawyer: lawyer._id,
                     date: meetDate,
-                    time: randomHour(),
+                    time: meetTime,
                     duration: 60,
                     consultationType: Math.random() > 0.3 ? 'video' : 'chat',
                     status: 'completed',
@@ -470,13 +490,16 @@ async function seed() {
             const n = Math.floor(1 + Math.random() * 3); // 1-3 upcoming each
             for (let k = 0; k < n; k++) {
                 const client = pick(savedClients);
-                const fwd = Math.floor(1 + Math.random() * 14); // 1-14 days
+                const { date: upcomingDate, time: upcomingTime } = reserveAppointmentSlot(
+                    lawyer._id,
+                    () => daysFromNow(Math.floor(1 + Math.random() * 14)) // 1-14 days
+                );
                 const status = Math.random() > 0.4 ? 'confirmed' : 'pending';
                 await new Appointment({
                     client: client._id,
                     lawyer: lawyer._id,
-                    date: daysFromNow(fwd),
-                    time: randomHour(),
+                    date: upcomingDate,
+                    time: upcomingTime,
                     duration: 60,
                     consultationType: Math.random() > 0.2 ? 'video' : 'chat',
                     status,
@@ -497,19 +520,23 @@ async function seed() {
             const lawyer = pick(savedLawyers);
             const client = pick(savedClients);
             const ago = Math.floor(5 + Math.random() * 60);
+            const { date: cancelledDate, time: cancelledTime } = reserveAppointmentSlot(
+                lawyer._id,
+                () => daysAgo(ago)
+            );
             const isCancelled = Math.random() > 0.5;
             await new Appointment({
                 client: client._id,
                 lawyer: lawyer._id,
-                date: daysAgo(ago),
-                time: randomHour(),
+                date: cancelledDate,
+                time: cancelledTime,
                 duration: 60,
                 consultationType: 'video',
                 status: isCancelled ? 'cancelled' : 'rejected',
                 amount: lawyer.hourlyRate,
                 paymentStatus: 'refunded',
                 ...(isCancelled
-                    ? { cancellationReason: pick(['Schedule conflict', 'Personal emergency', 'Found another lawyer', 'Issue resolved']), cancelledAt: daysAgo(ago) }
+                    ? { cancellationReason: pick(['Schedule conflict', 'Personal emergency', 'Found another lawyer', 'Issue resolved']), cancelledAt: cancelledDate }
                     : { rejectionReason: pick(['Schedule fully booked', 'Case outside expertise', 'Conflict of interest']), rejectedAt: daysAgo(ago) }
                 ),
             }).save();
