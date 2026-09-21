@@ -726,4 +726,10 @@ async function seed() {
     }
 }
 
+
+if (process.env.NODE_ENV === 'production' && process.env.RUN_SEED !== 'true') {
+    console.log('🛡️  Production seed skipped. Set RUN_SEED=true only for an intentional database reseed.');
+    process.exit(0);
+}
+
 seed();
