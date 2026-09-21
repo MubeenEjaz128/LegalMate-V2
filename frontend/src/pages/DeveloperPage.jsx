@@ -17,7 +17,6 @@ import {
   Rocket,
   Server,
   Sparkles,
-  TerminalSquare,
 } from 'lucide-react';
 
 const canonicalContent = {
@@ -32,7 +31,6 @@ const canonicalContent = {
   github: 'https://github.com/MubeenEjaz128',
   linkedin: 'https://www.linkedin.com/in/mubeen-ejaz/',
   website: 'https://www.mubeenejaz.app/',
-  whatsapp: 'https://wa.me/923177099128',
   stats: [
     { value: '10+', label: 'Projects shipped' },
     { value: '5+', label: 'Live deployments' },
@@ -165,23 +163,20 @@ const normalizeContent = (incoming = {}) => {
     Array.isArray(incoming.skills) &&
     incoming.skills.length &&
     incoming.skills.every((group) => group && typeof group === 'object' && Array.isArray(group.items))
-  ) {
-    normalized.skills = incoming.skills;
-  }
+  ) normalized.skills = incoming.skills;
+
   if (
     Array.isArray(incoming.projects) &&
     incoming.projects.length &&
     incoming.projects.every((project) => project && typeof project === 'object' && project.name)
-  ) {
-    normalized.projects = incoming.projects;
-  }
+  ) normalized.projects = incoming.projects;
+
   if (
     Array.isArray(incoming.education) &&
     incoming.education.length &&
     incoming.education.every((entry) => entry && typeof entry === 'object' && entry.degree)
-  ) {
-    normalized.education = incoming.education;
-  }
+  ) normalized.education = incoming.education;
+
   if (Array.isArray(incoming.achievements) && incoming.achievements.length) {
     normalized.achievements = incoming.achievements.filter(Boolean);
   }
@@ -199,7 +194,6 @@ const skillIcon = {
 
 const DeveloperPage = () => {
   const [content, setContent] = useState(canonicalContent);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -212,8 +206,6 @@ const DeveloperPage = () => {
       } catch (error) {
         console.error('Error fetching developer info:', error);
         if (mounted) setContent(canonicalContent);
-      } finally {
-        if (mounted) setLoading(false);
       }
     };
 
@@ -226,34 +218,38 @@ const DeveloperPage = () => {
   const displayContent = useMemo(() => normalizeContent(content), [content]);
 
   return (
-    <div className="min-h-screen bg-[#071019] text-white">
-      <section className="relative overflow-hidden border-b border-white/10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.18),transparent_34%),radial-gradient(circle_at_82%_20%,rgba(245,158,11,0.14),transparent_28%),linear-gradient(135deg,#071019_0%,#0b1622_45%,#071019_100%)]" />
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-          <div className="grid items-center gap-12 lg:grid-cols-[1.25fr_0.75fr]">
+    <div className="min-h-screen bg-[var(--surface-base)] text-secondary-900">
+      <section className="relative overflow-hidden border-b border-secondary-100 bg-gradient-to-br from-primary-50 via-white to-secondary-50">
+        <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-primary-200/40 blur-3xl" />
+        <div className="pointer-events-none absolute -right-16 bottom-0 h-64 w-64 rounded-full bg-accent-200/25 blur-3xl" />
+
+        <div className="relative container-custom py-14 lg:py-20">
+          <div className="grid items-center gap-12 lg:grid-cols-[1.2fr_0.8fr]">
             <div>
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-400/25 bg-sky-400/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-sky-300">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-primary-700 shadow-sm">
                 <Sparkles className="h-4 w-4" />
                 {displayContent.eyebrow}
               </div>
 
-              <h1 className="max-w-4xl text-4xl font-black tracking-tight sm:text-5xl lg:text-7xl">
+              <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-secondary-900 sm:text-5xl lg:text-6xl">
                 {displayContent.name}
               </h1>
-              <p className="mt-4 text-xl font-semibold text-amber-300 sm:text-2xl">
+
+              <p className="mt-4 text-xl font-bold text-primary-700 sm:text-2xl">
                 {displayContent.title}
               </p>
-              <p className="mt-6 max-w-3xl text-base leading-8 text-slate-300 sm:text-lg">
+
+              <p className="mt-6 max-w-3xl text-base leading-8 text-secondary-600 sm:text-lg">
                 {displayContent.bio}
               </p>
 
-              <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-slate-300">
+              <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-secondary-600">
                 <span className="inline-flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-sky-300" />
+                  <MapPin className="h-4 w-4 text-primary-600" />
                   {displayContent.location}
                 </span>
-                <a href={"mailto:" + displayContent.email} className="inline-flex items-center gap-2 hover:text-white">
-                  <Mail className="h-4 w-4 text-sky-300" />
+                <a href={"mailto:" + displayContent.email} className="inline-flex items-center gap-2 transition hover:text-primary-700">
+                  <Mail className="h-4 w-4 text-primary-600" />
                   {displayContent.email}
                 </a>
               </div>
@@ -263,23 +259,25 @@ const DeveloperPage = () => {
                   href={displayContent.website}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:-translate-y-0.5 hover:bg-slate-100"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-primary-700"
                 >
                   View Portfolio <ArrowUpRight className="h-4 w-4" />
                 </a>
+
                 <a
                   href={displayContent.github}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:border-white/30 hover:bg-white/10"
+                  className="inline-flex items-center gap-2 rounded-xl border border-secondary-200 bg-white px-5 py-3 text-sm font-bold text-secondary-800 shadow-sm transition hover:border-primary-300 hover:text-primary-700"
                 >
                   <Github className="h-4 w-4" /> GitHub
                 </a>
+
                 <a
                   href={displayContent.linkedin}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:border-white/30 hover:bg-white/10"
+                  className="inline-flex items-center gap-2 rounded-xl border border-secondary-200 bg-white px-5 py-3 text-sm font-bold text-secondary-800 shadow-sm transition hover:border-primary-300 hover:text-primary-700"
                 >
                   <Linkedin className="h-4 w-4" /> LinkedIn
                 </a>
@@ -287,28 +285,28 @@ const DeveloperPage = () => {
 
               <div className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
                 {displayContent.stats.map((stat) => (
-                  <div key={stat.label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur">
-                    <div className="text-2xl font-black text-white sm:text-3xl">{stat.value}</div>
-                    <div className="mt-1 text-xs font-medium text-slate-400 sm:text-sm">{stat.label}</div>
+                  <div key={stat.label} className="rounded-2xl border border-secondary-100 bg-white p-4 shadow-soft">
+                    <div className="text-2xl font-extrabold text-secondary-900 sm:text-3xl">{stat.value}</div>
+                    <div className="mt-1 text-xs font-medium text-secondary-500 sm:text-sm">{stat.label}</div>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="mx-auto w-full max-w-sm">
-              <div className="relative rounded-[2rem] border border-white/10 bg-white/[0.04] p-3 shadow-2xl shadow-sky-950/30">
-                <div className="absolute -inset-4 -z-10 rounded-[2.5rem] bg-gradient-to-br from-sky-400/15 to-amber-400/10 blur-2xl" />
+              <div className="relative rounded-[2rem] border border-secondary-100 bg-white p-3 shadow-elevated">
+                <div className="absolute -inset-4 -z-10 rounded-[2.5rem] bg-gradient-to-br from-primary-100 to-accent-100/50 blur-2xl" />
                 <img
                   src={displayContent.profileImage}
                   alt={displayContent.name}
-                  className="aspect-[4/5] w-full rounded-[1.55rem] object-cover bg-slate-900"
+                  className="aspect-[4/5] w-full rounded-[1.55rem] bg-secondary-100 object-cover"
                   onError={(event) => {
                     event.currentTarget.src = 'https://avatars.githubusercontent.com/u/94120325?v=4';
                   }}
                 />
-                <div className="absolute bottom-7 left-7 right-7 rounded-2xl border border-white/10 bg-slate-950/80 p-4 backdrop-blur">
-                  <div className="text-sm font-black tracking-wide text-white">M. MUBEEN EJAZ</div>
-                  <div className="mt-1 text-xs text-slate-300">Full-Stack · AI · Cloud · Systems</div>
+                <div className="absolute bottom-7 left-7 right-7 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-lg backdrop-blur">
+                  <div className="text-sm font-extrabold tracking-wide text-secondary-900">M. MUBEEN EJAZ</div>
+                  <div className="mt-1 text-xs font-medium text-secondary-500">Full-Stack · AI · Cloud · Systems</div>
                 </div>
               </div>
             </div>
@@ -316,36 +314,40 @@ const DeveloperPage = () => {
         </div>
       </section>
 
-      <main className="mx-auto max-w-7xl space-y-20 px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+      <main className="container-custom space-y-16 py-14 lg:py-20">
         <section>
-          <div className="mb-8 flex items-end justify-between gap-4">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.22em] text-sky-300">// 001 — Expertise</div>
-              <h2 className="mt-3 text-3xl font-black sm:text-4xl">Technical Expertise</h2>
-            </div>
-            <TerminalSquare className="hidden h-10 w-10 text-slate-600 sm:block" />
+          <div className="mb-8">
+            <div className="text-xs font-extrabold uppercase tracking-[0.2em] text-primary-600">Technical Profile</div>
+            <h2 className="mt-3 text-3xl font-bold text-secondary-900 sm:text-4xl">Technical Expertise</h2>
+            <p className="mt-3 max-w-2xl text-secondary-600">
+              Production-focused skills across frontend, backend, AI and deployment.
+            </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2">
             {displayContent.skills.map((group) => {
               const Icon = skillIcon[group.icon] || Code2;
               return (
                 <article
                   key={group.category}
-                  className="rounded-2xl border border-white/10 bg-white/[0.035] p-6 transition hover:-translate-y-1 hover:border-sky-400/25 hover:bg-white/[0.055]"
+                  className="rounded-2xl border border-secondary-100 bg-white p-6 shadow-soft transition hover:-translate-y-1 hover:border-primary-200 hover:shadow-lg"
                 >
                   <div className="flex items-start gap-4">
-                    <div className="rounded-xl border border-sky-400/20 bg-sky-400/10 p-3 text-sky-300">
+                    <div className="rounded-xl bg-primary-100 p-3 text-primary-700">
                       <Icon className="h-6 w-6" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-black">{group.category}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-400">{group.description}</p>
+                      <h3 className="text-xl font-bold text-secondary-900">{group.category}</h3>
+                      <p className="mt-2 text-sm leading-6 text-secondary-600">{group.description}</p>
                     </div>
                   </div>
+
                   <div className="mt-5 flex flex-wrap gap-2">
                     {group.items.map((item) => (
-                      <span key={item} className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1.5 text-xs font-semibold text-slate-300">
+                      <span
+                        key={item}
+                        className="rounded-full border border-primary-100 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700"
+                      >
                         {item}
                       </span>
                     ))}
@@ -358,34 +360,39 @@ const DeveloperPage = () => {
 
         <section>
           <div className="mb-8">
-            <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">// 002 — Selected work</div>
-            <h2 className="mt-3 text-3xl font-black sm:text-4xl">Featured Projects</h2>
-            <p className="mt-3 max-w-3xl text-slate-400">
-              Production systems spanning SaaS, AI/ML, real-time communication, portals and automation.
+            <div className="text-xs font-extrabold uppercase tracking-[0.2em] text-primary-600">Selected Work</div>
+            <h2 className="mt-3 text-3xl font-bold text-secondary-900 sm:text-4xl">Featured Projects</h2>
+            <p className="mt-3 max-w-3xl text-secondary-600">
+              SaaS, AI/ML, real-time communication, portal systems and automation projects.
             </p>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2">
             {displayContent.projects.map((project) => (
               <article
                 key={project.name}
-                className="group rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.055] to-white/[0.02] p-6 transition hover:border-white/20"
+                className="group rounded-2xl border border-secondary-100 bg-white p-6 shadow-soft transition hover:-translate-y-1 hover:border-primary-200 hover:shadow-lg"
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <span className="inline-flex rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-amber-300">
+                    <span className="inline-flex rounded-full bg-primary-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-primary-700">
                       {project.badge}
                     </span>
-                    <h3 className="mt-4 text-2xl font-black">{project.name}</h3>
+                    <h3 className="mt-4 text-2xl font-bold text-secondary-900">{project.name}</h3>
                   </div>
-                  <Rocket className="h-6 w-6 text-slate-500 transition group-hover:text-sky-300" />
+                  <div className="rounded-xl bg-secondary-50 p-2.5 text-secondary-400 transition group-hover:bg-primary-50 group-hover:text-primary-600">
+                    <Rocket className="h-5 w-5" />
+                  </div>
                 </div>
 
-                <p className="mt-4 leading-7 text-slate-400">{project.description}</p>
+                <p className="mt-4 leading-7 text-secondary-600">{project.description}</p>
 
                 <div className="mt-5 flex flex-wrap gap-2">
                   {project.tech.map((tech) => (
-                    <span key={tech} className="rounded-lg bg-slate-950/70 px-2.5 py-1.5 text-xs font-semibold text-slate-300">
+                    <span
+                      key={tech}
+                      className="rounded-lg border border-secondary-100 bg-secondary-50 px-2.5 py-1.5 text-xs font-semibold text-secondary-700"
+                    >
                       {tech}
                     </span>
                   ))}
@@ -393,31 +400,32 @@ const DeveloperPage = () => {
 
                 <div className="mt-5 grid gap-2 sm:grid-cols-2">
                   {project.highlights.map((highlight) => (
-                    <div key={highlight} className="flex items-start gap-2 text-sm text-slate-300">
-                      <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-sky-300" />
+                    <div key={highlight} className="flex items-start gap-2 text-sm text-secondary-600">
+                      <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-primary-500" />
                       {highlight}
                     </div>
                   ))}
                 </div>
 
                 {(project.live || project.github) && (
-                  <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
+                  <div className="mt-6 flex flex-wrap gap-4 border-t border-secondary-100 pt-5">
                     {project.live && (
                       <a
                         href={project.live}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-sm font-bold text-white hover:text-sky-300"
+                        className="inline-flex items-center gap-2 text-sm font-bold text-primary-700 hover:text-primary-800"
                       >
                         Live project <ExternalLink className="h-4 w-4" />
                       </a>
                     )}
+
                     {project.github && (
                       <a
                         href={project.github}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-sm font-bold text-slate-300 hover:text-white"
+                        className="inline-flex items-center gap-2 text-sm font-bold text-secondary-700 hover:text-primary-700"
                       >
                         <Github className="h-4 w-4" /> Repository
                       </a>
@@ -429,74 +437,72 @@ const DeveloperPage = () => {
           </div>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
-            <div className="flex items-center gap-3 text-sky-300">
+        <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-2xl border border-secondary-100 bg-white p-6 shadow-soft">
+            <div className="flex items-center gap-3 text-primary-700">
               <GraduationCap className="h-6 w-6" />
-              <span className="text-xs font-black uppercase tracking-[0.2em]">Education</span>
+              <span className="text-xs font-extrabold uppercase tracking-[0.18em]">Education</span>
             </div>
+
             {displayContent.education.map((edu) => (
               <div key={edu.degree} className="mt-6">
-                <h3 className="text-2xl font-black">{edu.degree}</h3>
-                <p className="mt-2 font-bold text-amber-300">{edu.institution}</p>
-                <p className="mt-1 text-sm text-slate-500">{edu.year}</p>
-                <p className="mt-4 leading-7 text-slate-400">{edu.description}</p>
+                <h3 className="text-2xl font-bold text-secondary-900">{edu.degree}</h3>
+                <p className="mt-2 font-bold text-primary-700">{edu.institution}</p>
+                <p className="mt-1 text-sm text-secondary-500">{edu.year}</p>
+                <p className="mt-4 leading-7 text-secondary-600">{edu.description}</p>
               </div>
             ))}
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
-            <div className="flex items-center gap-3 text-amber-300">
+          <div className="rounded-2xl border border-secondary-100 bg-white p-6 shadow-soft">
+            <div className="flex items-center gap-3 text-primary-700">
               <Award className="h-6 w-6" />
-              <span className="text-xs font-black uppercase tracking-[0.2em]">Highlights</span>
+              <span className="text-xs font-extrabold uppercase tracking-[0.18em]">Highlights</span>
             </div>
+
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {displayContent.achievements.map((item, index) => (
-                <div key={item} className="rounded-xl border border-white/10 bg-slate-950/35 p-4">
-                  <div className="text-xs font-black text-sky-300">0{index + 1}</div>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{item}</p>
+                <div key={item} className="rounded-xl border border-secondary-100 bg-secondary-50 p-4">
+                  <div className="text-xs font-extrabold text-primary-600">0{index + 1}</div>
+                  <p className="mt-2 text-sm leading-6 text-secondary-700">{item}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-sky-500/15 via-white/[0.04] to-amber-400/10 p-7 sm:p-10">
+        <section className="overflow-hidden rounded-3xl border border-primary-100 bg-gradient-to-br from-primary-50 via-white to-accent-50 p-7 shadow-soft sm:p-10">
           <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto]">
             <div>
-              <div className="flex items-center gap-2 text-sky-300">
+              <div className="flex items-center gap-2 text-primary-700">
                 <BriefcaseBusiness className="h-5 w-5" />
-                <span className="text-xs font-black uppercase tracking-[0.2em]">Build something useful</span>
+                <span className="text-xs font-extrabold uppercase tracking-[0.18em]">Build Something Useful</span>
               </div>
-              <h2 className="mt-4 text-3xl font-black sm:text-4xl">Let&apos;s work together.</h2>
-              <p className="mt-3 max-w-2xl leading-7 text-slate-300">
+              <h2 className="mt-4 text-3xl font-bold text-secondary-900 sm:text-4xl">Let&apos;s work together.</h2>
+              <p className="mt-3 max-w-2xl leading-7 text-secondary-600">
                 For full-stack development, AI integrations, SaaS products, backend architecture or deployment work, reach out through the portfolio or email.
               </p>
             </div>
+
             <div className="flex flex-wrap gap-3 lg:justify-end">
               <a
                 href={"mailto:" + displayContent.email}
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 hover:bg-slate-100"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-bold text-white shadow-md hover:bg-primary-700"
               >
                 <Mail className="h-4 w-4" /> Email
               </a>
+
               <a
                 href={displayContent.website}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-black hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-xl border border-secondary-200 bg-white px-5 py-3 text-sm font-bold text-secondary-800 shadow-sm hover:border-primary-300 hover:text-primary-700"
               >
                 <Globe2 className="h-4 w-4" /> Portfolio
               </a>
             </div>
           </div>
         </section>
-
-        {loading && (
-          <div className="sr-only" aria-live="polite">
-            Loading developer profile
-          </div>
-        )}
       </main>
     </div>
   );
